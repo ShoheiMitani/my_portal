@@ -1,12 +1,21 @@
 import { Hono } from "hono";
-import talksRoute from "./routes/talks";
-import top from "./routes/top";
-import works from "./routes/works";
+import { agentsMiddleware } from "hono-agents";
+import { fetchHatenaBlog, fetchSpeakerDeck } from "./lib/feeds";
+
+export { TrendCollectorAgent } from "./agent/trend-collector";
 
 const app = new Hono();
 
-app.route("/", top);
-app.route("/works", works);
-app.route("/talks", talksRoute);
+app.use("*", agentsMiddleware());
+
+app.get("/api/feeds/blog", async (c) => {
+	const entries = await fetchHatenaBlog().catch(() => []);
+	return c.json(entries);
+});
+
+app.get("/api/feeds/slides", async (c) => {
+	const entries = await fetchSpeakerDeck().catch(() => []);
+	return c.json(entries);
+});
 
 export default app;

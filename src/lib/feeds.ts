@@ -1,21 +1,5 @@
 import type { FeedEntry } from "../types";
-
-function escapeRegExp(s: string): string {
-	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function extractTag(block: string, tag: string): string {
-	const t = escapeRegExp(tag);
-	const match = new RegExp(`<${t}[^>]*>([^<]*)</${t}>`).exec(block);
-	return match ? match[1] : "";
-}
-
-function extractAttr(block: string, tag: string, attr: string): string {
-	const t = escapeRegExp(tag);
-	const a = escapeRegExp(attr);
-	const match = new RegExp(`<${t}[^>]*${a}="([^"]*)"`, "i").exec(block);
-	return match ? match[1] : "";
-}
+import { extractAttr, extractTag } from "./xml";
 
 export async function fetchHatenaBlog(): Promise<FeedEntry[]> {
 	const res = await fetch("https://shohei1913.hatenablog.com/rss");

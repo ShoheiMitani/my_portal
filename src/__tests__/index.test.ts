@@ -1,77 +1,65 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../index";
+import {
+	hatenaRssSingle,
+	speakerdeckAtomSingle,
+	stubFetchError,
+	stubFetchForBlog,
+	stubFetchForSlides,
+} from "./fixtures/feeds";
 
-describe("GET /", () => {
-	it("returns 200", async () => {
-		const res = await app.request("/");
+describe("GET /api/feeds/blog", () => {
+	beforeEach(() => {
+		stubFetchForBlog(hatenaRssSingle);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("returns 200 with JSON", async () => {
+		const res = await app.request("/api/feeds/blog");
 		expect(res.status).toBe(200);
+		expect(res.headers.get("content-type")).toContain("application/json");
 	});
 
-	it("returns HTML content type", async () => {
-		const res = await app.request("/");
-		expect(res.headers.get("content-type")).toContain("text/html");
+	it("returns blog entries", async () => {
+		const res = await app.request("/api/feeds/blog");
+		const data = (await res.json()) as { title: string; source: string }[];
+		expect(data).toHaveLength(1);
+		expect(data[0].title).toBe("テスト記事1");
+		expect(data[0].source).toBe("Blog");
+	});
+});
+
+describe("GET /api/feeds/slides", () => {
+	beforeEach(() => {
+		stubFetchForSlides(speakerdeckAtomSingle);
 	});
 
-	it("contains profile name", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("ShoheiMitani");
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
-	it("contains bio", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("Engineering Manager");
+	it("returns 200 with JSON", async () => {
+		const res = await app.request("/api/feeds/slides");
+		expect(res.status).toBe(200);
+		expect(res.headers.get("content-type")).toContain("application/json");
 	});
 
-	it("contains link to X", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("https://x.com/shohei1913");
+	it("returns slide entries", async () => {
+		const res = await app.request("/api/feeds/slides");
+		const data = (await res.json()) as { title: string; source: string }[];
+		expect(data).toHaveLength(1);
+		expect(data[0].title).toBe("テスト発表資料1");
+		expect(data[0].source).toBe("Slide");
 	});
 
-	it("contains link to Hatena Blog", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("https://shohei1913.hatenablog.com/");
-	});
-
-	it("contains link to SpeakerDeck", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("https://speakerdeck.com/shoheimitani");
-	});
-
-	it("contains link to company", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("https://smartbank.co.jp/");
-	});
-
-	it("contains avatar image", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("<img");
-		expect(body).toContain("shohei1913");
-	});
-
-	it("contains hamburger menu button", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("menu-toggle");
-	});
-
-	it("contains link to works in menu", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain('href="/works"');
-		expect(body).toContain("Works");
-	});
-
-	it("contains link to talks in menu", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain('href="/talks"');
-		expect(body).toContain("Talks");
+	it("handles fetch errors gracefully", async () => {
+		stubFetchError();
+		const res = await app.request("/api/feeds/slides");
+		expect(res.status).toBe(200);
+		const data = (await res.json()) as { title: string; source: string }[];
+		expect(data).toEqual([]);
 	});
 });

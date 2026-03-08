@@ -133,12 +133,3 @@ body {
 	transition: color 0.2s;
 }
 .menu-drawer a:hover { color: #666; }`;
-
-export const menuScript = `
-const toggle = document.getElementById('menu-toggle');
-const overlay = document.getElementById('menu-overlay');
-const drawer = document.getElementById('menu-drawer');
-function openMenu() { drawer.classList.add('open'); overlay.classList.add('open'); }
-function closeMenu() { drawer.classList.remove('open'); overlay.classList.remove('open'); }
-toggle.addEventListener('click', () => drawer.classList.contains('open') ? closeMenu() : openMenu());
-overlay.addEventListener('click', closeMenu);`;

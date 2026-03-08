@@ -4,7 +4,16 @@
 		"includes": ["src/**"]
 	},
 	"linter": {
-		"enabled": true
+		"enabled": true,
+		"rules": {
+			"suspicious": {
+				"noArrayIndexKey": "warn"
+			},
+			"a11y": {
+				"useAnchorContent": "warn",
+				"noStaticElementInteractions": "warn"
+			}
+		}
 	},
 	"formatter": {
 		"enabled": true

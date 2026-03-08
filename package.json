@@ -3,34 +3,55 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
     "lint": "biome lint .",
     "format:check": "biome format .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "knip": "knip"
+    "knip": "knip",
+    "migrate:local": "wrangler d1 migrations apply trend-collector-db --local"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "knip": {
     "vitest": {
-      "config": ["vitest.config.ts"],
-      "entry": ["src/__tests__/**/*.test.ts"]
+      "config": [
+        "vitest.config.ts"
+      ],
+      "entry": [
+        "src/__tests__/**/*.test.ts"
+      ]
     }
   },
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
+    "@cloudflare/ai-chat": "^0.1.8",
+    "agents": "^0.7.5",
+    "ai": "^6.0.116",
     "hono": "^4.12.5",
-    "yaml": "^2.8.2"
+    "hono-agents": "^3.0.7",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router": "^7.13.1",
+    "workers-ai-provider": "^3.1.2",
+    "yaml": "^2.8.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.6",
+    "@cloudflare/vite-plugin": "^1.26.1",
     "@cloudflare/workers-types": "^4.20260307.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
     "knip": "^5.86.0",
     "typescript": "^5.9.3",
+    "vite": "^7.3.1",
     "vitest": "^4.0.18",
     "wrangler": "^4.71.0"
   }
