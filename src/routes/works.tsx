@@ -3,6 +3,7 @@ import type { FC } from "hono/jsx";
 import { parse as parseYaml } from "yaml";
 import { ListPageLayout } from "../components/layout";
 import { Thumbnail } from "../components/thumbnail";
+import { YearSeparator } from "../components/year-separator";
 import { fetchHatenaBlog, fetchSpeakerDeck, formatDate } from "../lib/feeds";
 import { worksPageStyles } from "../styles/works";
 import type { ArticleYmlEntry, FeedEntry } from "../types";
@@ -51,9 +52,16 @@ works.get("/", async (c) => {
 			pageTitle="Works"
 			styles={worksPageStyles}
 		>
-			{entries.map((e) => (
-				<WorkEntryItem entry={e} />
-			))}
+			{entries.map((e, i) => {
+				const year = e.date.getFullYear();
+				const prevYear = i > 0 ? entries[i - 1].date.getFullYear() : null;
+				return (
+					<>
+						{year !== prevYear && <YearSeparator year={year} />}
+						<WorkEntryItem entry={e} />
+					</>
+				);
+			})}
 		</ListPageLayout>,
 	);
 });

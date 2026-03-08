@@ -71,6 +71,30 @@ describe("GET /talks", () => {
 		expect(body).toContain("talk-thumbnail");
 	});
 
+	it("displays year separators", async () => {
+		const res = await app.request("/talks");
+		const body = await res.text();
+		expect(body).toContain("year-separator");
+		expect(body).toContain(">2026<");
+		expect(body).toContain(">2025<");
+		expect(body).toContain(">2024<");
+		expect(body).toContain(">2023<");
+		expect(body).toContain(">2022<");
+		expect(body).toContain(">2021<");
+	});
+
+	it("displays year separators before entries of that year", async () => {
+		const res = await app.request("/talks");
+		const body = await res.text();
+		const year2026 = body.indexOf(">2026<");
+		const year2025 = body.indexOf(">2025<");
+		const year2024 = body.indexOf(">2024<");
+		const firstTalk2025 = body.indexOf("YAPC::Fukuoka 2025");
+		expect(year2026).toBeLessThan(year2025);
+		expect(year2025).toBeLessThan(firstTalk2025);
+		expect(year2025).toBeLessThan(year2024);
+	});
+
 	it("contains link back to top page", async () => {
 		const res = await app.request("/talks");
 		const body = await res.text();

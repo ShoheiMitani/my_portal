@@ -3,6 +3,7 @@ import type { FC } from "hono/jsx";
 import { parse as parseYaml } from "yaml";
 import { ListPageLayout } from "../components/layout";
 import { Thumbnail } from "../components/thumbnail";
+import { YearSeparator } from "../components/year-separator";
 import { talksPageStyles } from "../styles/talks";
 import type { TalkEntry } from "../types";
 import talksYml from "../talks.yml";
@@ -30,9 +31,17 @@ talksRoute.get("/", (c) => {
 			pageTitle="Talks"
 			styles={talksPageStyles}
 		>
-			{talks.map((t) => (
-				<TalkItem talk={t} />
-			))}
+			{talks.map((t, i) => {
+				const year = new Date(t.date).getFullYear();
+				const prevYear =
+					i > 0 ? new Date(talks[i - 1].date).getFullYear() : null;
+				return (
+					<>
+						{year !== prevYear && <YearSeparator year={year} />}
+						<TalkItem talk={t} />
+					</>
+				);
+			})}
 		</ListPageLayout>,
 	);
 });

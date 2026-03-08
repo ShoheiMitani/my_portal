@@ -11,14 +11,12 @@ body {
 
 export const listPageBaseStyles = `${resetStyles}
 body {
-	display: flex;
-	justify-content: center;
 	min-height: 100vh;
-	padding: 2rem 1rem;
+	padding: 2rem 1rem 4rem;
 }
 .container {
 	max-width: 640px;
-	width: 100%;
+	margin: 0 auto;
 }
 .header {
 	display: flex;
@@ -45,6 +43,15 @@ body {
 	font-size: 1.5rem;
 	font-weight: bold;
 	color: #333;
+}
+.year-separator {
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: #999;
+	padding: 0.75rem 0 0.25rem;
+}
+.year-separator:first-child {
+	padding-top: 0;
 }`;
 
 export function cardStyles(prefix: string, thumbnailWidth: string): string {

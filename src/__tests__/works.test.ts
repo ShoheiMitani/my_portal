@@ -130,6 +130,21 @@ describe("GET /works", () => {
 		expect(body).toContain("entry-thumbnail");
 	});
 
+	it("displays year separator for 2026", async () => {
+		const res = await app.request("/works");
+		const body = await res.text();
+		expect(body).toContain("year-separator");
+		expect(body).toContain(">2026<");
+	});
+
+	it("displays year separator before entries of that year", async () => {
+		const res = await app.request("/works");
+		const body = await res.text();
+		const yearPos = body.indexOf(">2026<");
+		const firstEntry = body.indexOf("テスト記事1");
+		expect(yearPos).toBeLessThan(firstEntry);
+	});
+
 	it("handles fetch errors gracefully", async () => {
 		vi.stubGlobal(
 			"fetch",
