@@ -15,9 +15,16 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "knip": {
+    "vitest": {
+      "config": ["vitest.config.ts"],
+      "entry": ["src/__tests__/**/*.test.ts"]
+    }
+  },
   "type": "commonjs",
   "dependencies": {
-    "hono": "^4.12.5"
+    "hono": "^4.12.5",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.6",

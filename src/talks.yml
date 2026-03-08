@@ -1,0 +1,77 @@
+- title: "スーパーマンに頼らない\"分権型組織\"で作る強い開発チーム"
+  event: Engineering Management Conference Japan 2026
+  date: "2026-03-04"
+  link: https://fortee.jp/emconf-2026/proposal/d0d2f29d-32e3-4137-9b3b-72d08cbbe5c3
+  thumbnail: https://fortee.jp/emconf-2026/proposal/og-image/d0d2f29d-32e3-4137-9b3b-72d08cbbe5c3.png
+
+- title: 2重リクエスト完全攻略HANDBOOK
+  event: Developers Summit 2026
+  date: "2026-02-19"
+  link: https://event.shoeisha.jp/devsumi/20260218/session/6448
+  thumbnail: https://dm25qh0q2b215.cloudfront.net/static/images/event/1691/images/logo.svg
+
+- title: プロポーザルに込める段取り八分
+  event: エンジニアの登壇資料を大解剖！
+  date: "2026-02-05"
+  link: https://findy.connpass.com/event/380968/
+  thumbnail: ""
+
+- title: 2重リクエスト完全攻略HANDBOOK
+  event: Kaigi on Rails 2025
+  date: "2025-09-27"
+  link: https://kaigionrails.org/2025/talks/ShoheiMitani/#day2
+  thumbnail: https://kaigionrails.org/2025/images/talks/og-7cd8d344d094b0952f95c562b6f08bb4bb3e7df688efc8b8ca3fc2ede2a2ead2.png
+
+- title: 競馬で学ぶ機械学習の基本と実践
+  event: YAPC::Fukuoka 2025
+  date: "2025-11-15"
+  link: https://fortee.jp/yapc-fukuoka-2025/proposal/4dd02c14-92fc-4fd2-b93f-5b38463ec32a
+  thumbnail: https://fortee.jp/yapc-fukuoka-2025/proposal/og-image/4dd02c14-92fc-4fd2-b93f-5b38463ec32a.png
+
+- title: エンジニアリングマネージャー"お悩み相談"パネルセッション
+  event: Developers Summit 2025 Summer
+  date: "2025-07-18"
+  link: https://event.shoeisha.jp/devsumi/20250717/session/5930
+  thumbnail: https://dm25qh0q2b215.cloudfront.net/static/images/event/1667/images/logo.svg
+
+- title: ユーザーフレンドリーな取引明細のアーキテクチャ〜VISAカードの複雑性に向き合う実践例〜
+  event: アーキテクチャを突き詰める Online Conference
+  date: "2024-05-22"
+  link: https://findy.connpass.com/event/314782/
+  thumbnail: ""
+
+- title: 法律に準拠した本人確認システムを0から作った話 〜家計簿プリカB/43でのeKYC開発実例〜
+  event: builderscon 2024
+  date: "2024-08-10"
+  link: https://fortee.jp/builderscon-2024/proposal/61a6a373-c5f7-4e5b-a24a-ed52b87d0b90
+  thumbnail: https://fortee.jp/builderscon-2024/proposal/og-image/61a6a373-c5f7-4e5b-a24a-ed52b87d0b90.png
+
+- title: VISAカードの裏側と "手が掛かる" 決済システムの育て方
+  event: YAPC::Hiroshima 2024
+  date: "2024-02-10"
+  link: https://fortee.jp/yapc-hiroshima-2024/proposal/c0e77f91-f856-48a0-9741-b9afb662cd30
+  thumbnail: https://fortee.jp/yapc-hiroshima-2024/proposal/og-image/c0e77f91-f856-48a0-9741-b9afb662cd30.png
+
+- title: 32個のPRでリリースした依存度の高いコアなモデルの安全な弄り方
+  event: Kaigi on Rails 2023
+  date: "2023-10-27"
+  link: https://kaigionrails.org/2023/talks/ShoheiMitani/
+  thumbnail: https://kaigionrails.org/2023/images/symbol_kaigionrails2023.svg
+
+- title: 本番環境のRailsでYJITをONにしてみた結果
+  event: TokyuRuby会議14
+  date: "2023-07-29"
+  link: https://tokyurubykaigi.github.io/tokyu14/
+  thumbnail: ""
+
+- title: 7つの入金外部サービスと連携して分かった実践的な"状態管理"設計パターン3選
+  event: Kaigi on Rails 2022
+  date: "2022-10-21"
+  link: https://kaigionrails.org/2022/talks/shohei1913/
+  thumbnail: https://kaigionrails.org/2022/images/logo/main_visual.svg
+
+- title: 監視を通じたサービスの逐次的進化 ~B/43の決済サービスでの取り組み~
+  event: Kaigi on Rails 2021
+  date: "2021-10-22"
+  link: https://kaigionrails.org/2021/talks/shohei1913/
+  thumbnail: https://kaigionrails.org/2021/images/logo_rugy.svg

@@ -54,4 +54,24 @@ describe("GET /", () => {
 		expect(body).toContain("<img");
 		expect(body).toContain("shohei1913");
 	});
+
+	it("contains hamburger menu button", async () => {
+		const res = await app.request("/");
+		const body = await res.text();
+		expect(body).toContain("menu-toggle");
+	});
+
+	it("contains link to works in menu", async () => {
+		const res = await app.request("/");
+		const body = await res.text();
+		expect(body).toContain('href="/works"');
+		expect(body).toContain("Works");
+	});
+
+	it("contains link to talks in menu", async () => {
+		const res = await app.request("/");
+		const body = await res.text();
+		expect(body).toContain('href="/talks"');
+		expect(body).toContain("Talks");
+	});
 });
