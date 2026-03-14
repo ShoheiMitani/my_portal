@@ -1,77 +1,120 @@
-import { describe, expect, it } from "vitest";
-import app from "../index";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { app } from "../index";
+import {
+	hatenaRssSingle,
+	speakerdeckAtomSingle,
+	stubFetchError,
+	stubFetchForBlog,
+	stubFetchForSlides,
+} from "./fixtures/feeds";
 
-describe("GET /", () => {
-	it("returns 200", async () => {
-		const res = await app.request("/");
+vi.mock("../agent/crawl", () => ({
+	crawlAllChannels: vi
+		.fn()
+		.mockResolvedValue([
+			{ channel: "test_rss", articlesFound: 3, articlesNew: 1 },
+		]),
+	USER_AGENT: "TestBot/1.0",
+}));
+
+describe("GET /api/feeds/blog", () => {
+	beforeEach(() => {
+		stubFetchForBlog(hatenaRssSingle);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("returns 200 with JSON", async () => {
+		const res = await app.request("/api/feeds/blog");
 		expect(res.status).toBe(200);
+		expect(res.headers.get("content-type")).toContain("application/json");
 	});
 
-	it("returns HTML content type", async () => {
-		const res = await app.request("/");
-		expect(res.headers.get("content-type")).toContain("text/html");
+	it("returns blog entries", async () => {
+		const res = await app.request("/api/feeds/blog");
+		const data = (await res.json()) as { title: string; source: string }[];
+		expect(data).toHaveLength(1);
+		expect(data[0].title).toBe("テスト記事1");
+		expect(data[0].source).toBe("Blog");
+	});
+});
+
+describe("GET /api/feeds/slides", () => {
+	beforeEach(() => {
+		stubFetchForSlides(speakerdeckAtomSingle);
 	});
 
-	it("contains profile name", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("ShoheiMitani");
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
-	it("contains bio", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("Engineering Manager");
+	it("returns 200 with JSON", async () => {
+		const res = await app.request("/api/feeds/slides");
+		expect(res.status).toBe(200);
+		expect(res.headers.get("content-type")).toContain("application/json");
 	});
 
-	it("contains link to X", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("https://x.com/shohei1913");
+	it("returns slide entries", async () => {
+		const res = await app.request("/api/feeds/slides");
+		const data = (await res.json()) as { title: string; source: string }[];
+		expect(data).toHaveLength(1);
+		expect(data[0].title).toBe("テスト発表資料1");
+		expect(data[0].source).toBe("Slide");
 	});
 
-	it("contains link to Hatena Blog", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("https://shohei1913.hatenablog.com/");
+	it("handles fetch errors gracefully", async () => {
+		stubFetchError();
+		const res = await app.request("/api/feeds/slides");
+		expect(res.status).toBe(200);
+		const data = (await res.json()) as { title: string; source: string }[];
+		expect(data).toEqual([]);
+	});
+});
+
+const mockEnv = { DB: {} as D1Database, AI: {} as Ai };
+
+describe("POST /api/crawl", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
-	it("contains link to SpeakerDeck", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("https://speakerdeck.com/shoheimitani");
+	it("returns 200 with crawl results", async () => {
+		const res = await app.request("/api/crawl", { method: "POST" }, mockEnv);
+		expect(res.status).toBe(200);
+		const data = (await res.json()) as {
+			channel: string;
+			articlesFound: number;
+			articlesNew: number;
+		}[];
+		expect(data).toHaveLength(1);
+		expect(data[0].channel).toBe("test_rss");
+		expect(data[0].articlesFound).toBe(3);
+		expect(data[0].articlesNew).toBe(1);
 	});
 
-	it("contains link to company", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("https://smartbank.co.jp/");
+	it("returns JSON content type", async () => {
+		const res = await app.request("/api/crawl", { method: "POST" }, mockEnv);
+		expect(res.headers.get("content-type")).toContain("application/json");
 	});
+});
 
-	it("contains avatar image", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("<img");
-		expect(body).toContain("shohei1913");
-	});
+describe("scheduled handler", () => {
+	it("calls crawlAllChannels and logs results", async () => {
+		const { crawlAllChannels } = await import("../agent/crawl");
+		const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const mockWaitUntil = vi.fn((p: Promise<unknown>) => p);
 
-	it("contains hamburger menu button", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain("menu-toggle");
-	});
+		const handler = (await import("../index")).default;
+		await handler.scheduled(
+			{} as ScheduledEvent,
+			{ DB: {} as D1Database, AI: {} as Ai },
+			{ waitUntil: mockWaitUntil } as unknown as ExecutionContext,
+		);
 
-	it("contains link to works in menu", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain('href="/works"');
-		expect(body).toContain("Works");
-	});
-
-	it("contains link to talks in menu", async () => {
-		const res = await app.request("/");
-		const body = await res.text();
-		expect(body).toContain('href="/talks"');
-		expect(body).toContain("Talks");
+		expect(crawlAllChannels).toHaveBeenCalled();
+		expect(mockWaitUntil).toHaveBeenCalled();
+		consoleSpy.mockRestore();
 	});
 });

@@ -12,5 +12,26 @@ export default defineConfig({
 				}
 			},
 		},
+		{
+			name: "mock-cloudflare-protocol",
+			enforce: "pre",
+			resolveId(id) {
+				if (id.startsWith("cloudflare:")) {
+					return `\0${id}`;
+				}
+			},
+			load(id) {
+				if (id.startsWith("\0cloudflare:")) {
+					return "export class DurableObject {}; export class WorkerEntrypoint {}; export class RpcTarget {}; export class WorkflowEntrypoint {};";
+				}
+			},
+		},
 	],
+	test: {
+		server: {
+			deps: {
+				inline: [/.*/],
+			},
+		},
+	},
 });

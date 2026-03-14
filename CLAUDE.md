@@ -37,3 +37,10 @@ pnpm exec vitest run src/__tests__/index.test.ts
 - **Formatter**: Biome (tab indentation)
 - **TDD**: Write tests first, then implement
 - **Package manager**: pnpm (not npm)
+
+## Self Review
+
+実装タスクが完了したら、最後に以下のスキルを順番に実行してセルフレビューを行うこと。
+
+1. `/simplify` — 変更したコードの再利用性・品質・効率性をレビューし、問題があれば修正する
+2. `/code-review` — コードレビューを実施し、問題があれば修正する
