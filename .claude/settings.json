@@ -1,31 +1,27 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(node -e \":*)",
-      "Bash(pnpm run dev)",
-      "Bash(NODE_OPTIONS=\"--stack-trace-limit=50\" pnpm run dev)",
-      "Bash(npx vite dev --debug)",
-      "Bash(pnpm run build)",
-      "Bash(pnpm ls @cloudflare/vite-plugin wrangler)",
-      "Bash(npx esbuild --version)",
-      "Bash(pnpm exec esbuild --version)",
-      "Bash(node -e \"console.log\\(require\\(''esbuild/package.json''\\).version\\)\")",
-      "Bash(node -e \"const p = require\\(''vite/package.json''\\); console.log\\(''vite:'', p.version\\)\")",
-      "Bash(node -e \"const path = require.resolve\\(''vite''\\); const dir = require\\(''path''\\).dirname\\(path\\); const pkg = require\\(require\\(''path''\\).join\\(dir, ''..'', ''package.json''\\)\\); console.log\\(''esbuild dep:'', pkg.dependencies?.esbuild || pkg.optionalDependencies?.esbuild\\)\")",
-      "Bash(cat /Users/s-mitani/ghq/github.com/ShoheiMitani/my_portal/node_modules/.pnpm/vite@7.3.1_*/node_modules/vite/package.json)",
-      "Bash(pnpm exec wrangler d1 create trend-collector-db)",
-      "Bash(CLOUDFLARE_API_TOKEN=\"\" pnpm exec wrangler d1 create trend-collector-db)",
-      "Bash(pnpm exec wrangler d1 migrations create trend-collector-db init)",
-      "Bash(pnpm exec wrangler d1 migrations apply trend-collector-db --local)",
-      "Bash(xxd)",
-      "Bash(for f in index.html migrations/0001_init.sql src/__tests__/agent/rss.test.ts src/agent/rss.ts src/agent/trend-collector.ts src/agent/types.ts src/chat/app.tsx src/chat/client.tsx src/pages/components/back-icon.tsx src/pages/components/list-layout.tsx src/pages/components/thumbnail.tsx src/pages/talks.tsx src/pages/top.tsx src/pages/works.tsx src/styles/chat.ts vite.config.ts)",
-      "Bash(do echo \"=== $f ===\")",
-      "Read(//Users/s-mitani/ghq/github.com/ShoheiMitani/my_portal/**)",
-      "Bash(done)",
-      "Bash(git rm src/chat/app.tsx src/chat/client.tsx)",
-      "Bash(python3:*)",
-      "Bash(git checkout src/pages/chat.tsx)",
-      "Bash(pnpm exec biome format --write src/pages/chat.tsx)"
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm biome lint --fix ."
+          },
+          {
+            "type": "command",
+            "command": "pnpm biome format --write ."
+          },
+          {
+            "type": "command",
+            "command": "pnpm run typecheck"
+          },
+          {
+            "type": "command",
+            "command": "pnpm run test"
+          }
+        ]
+      }
     ]
   }
 }

@@ -11,7 +11,7 @@ export function ChatPage() {
 		agent: "TrendCollector",
 	});
 
-	const { messages, sendMessage, clearHistory, status } = useAgentChat({
+	const { messages, sendMessage, clearHistory, status, error } = useAgentChat({
 		agent,
 	});
 
@@ -57,7 +57,7 @@ export function ChatPage() {
 								{msg.role === "user" ? "You" : "Agent"}
 							</div>
 							{msg.parts.map((part, partIndex) => {
-								if (part.type === "text") {
+								if (part.type === "text" || part.type === "reasoning") {
 									return (
 										<div key={`${msg.id}-text-${partIndex}`} className="text">
 											{part.text}
@@ -81,6 +81,7 @@ export function ChatPage() {
 						</div>
 					))}
 					{status === "streaming" && <div className="streaming">分析中...</div>}
+					{error && <div className="error">エラー: {error.message}</div>}
 				</div>
 
 				<form onSubmit={handleSubmit} className="chat-form">

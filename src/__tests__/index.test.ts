@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import app from "../index";
+import { app } from "../index";
 import {
 	hatenaRssSingle,
 	speakerdeckAtomSingle,
@@ -7,6 +7,15 @@ import {
 	stubFetchForBlog,
 	stubFetchForSlides,
 } from "./fixtures/feeds";
+
+vi.mock("../agent/crawl", () => ({
+	crawlAllChannels: vi
+		.fn()
+		.mockResolvedValue([
+			{ channel: "test_rss", articlesFound: 3, articlesNew: 1 },
+		]),
+	USER_AGENT: "TestBot/1.0",
+}));
 
 describe("GET /api/feeds/blog", () => {
 	beforeEach(() => {
@@ -61,5 +70,51 @@ describe("GET /api/feeds/slides", () => {
 		expect(res.status).toBe(200);
 		const data = (await res.json()) as { title: string; source: string }[];
 		expect(data).toEqual([]);
+	});
+});
+
+const mockEnv = { DB: {} as D1Database, AI: {} as Ai };
+
+describe("POST /api/crawl", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("returns 200 with crawl results", async () => {
+		const res = await app.request("/api/crawl", { method: "POST" }, mockEnv);
+		expect(res.status).toBe(200);
+		const data = (await res.json()) as {
+			channel: string;
+			articlesFound: number;
+			articlesNew: number;
+		}[];
+		expect(data).toHaveLength(1);
+		expect(data[0].channel).toBe("test_rss");
+		expect(data[0].articlesFound).toBe(3);
+		expect(data[0].articlesNew).toBe(1);
+	});
+
+	it("returns JSON content type", async () => {
+		const res = await app.request("/api/crawl", { method: "POST" }, mockEnv);
+		expect(res.headers.get("content-type")).toContain("application/json");
+	});
+});
+
+describe("scheduled handler", () => {
+	it("calls crawlAllChannels and logs results", async () => {
+		const { crawlAllChannels } = await import("../agent/crawl");
+		const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const mockWaitUntil = vi.fn((p: Promise<unknown>) => p);
+
+		const handler = (await import("../index")).default;
+		await handler.scheduled(
+			{} as ScheduledEvent,
+			{ DB: {} as D1Database, AI: {} as Ai },
+			{ waitUntil: mockWaitUntil } as unknown as ExecutionContext,
+		);
+
+		expect(crawlAllChannels).toHaveBeenCalled();
+		expect(mockWaitUntil).toHaveBeenCalled();
+		consoleSpy.mockRestore();
 	});
 });

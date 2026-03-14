@@ -90,6 +90,13 @@ body {
 	font-style: italic;
 	padding: 0.5rem 1rem;
 }
+.error {
+	color: #c00;
+	font-size: 0.85rem;
+	padding: 0.5rem 1rem;
+	background: #fff0f0;
+	border-radius: 8px;
+}
 .chat-form {
 	display: flex;
 	gap: 0.5rem;

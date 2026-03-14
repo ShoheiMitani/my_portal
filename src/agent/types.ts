@@ -1,24 +1,24 @@
-export interface RssArticle {
+export interface Env {
+	AI: Ai;
+	DB: D1Database;
+}
+
+export interface FeedArticle {
 	url: string;
 	title: string;
 	description: string;
 	publishedAt: string;
-	bookmarkCount: number;
+	metadata: Record<string, unknown>;
 }
 
-export interface StoredArticle {
-	id: string;
-	url: string;
-	title: string;
-	description: string;
-	published_at: string;
-	bookmark_count: number;
-	source: string;
-	created_at: string;
+export interface ArticleWithContent extends FeedArticle {
+	content: string;
 }
 
-export interface Interest {
+export interface Channel {
 	id: string;
-	keyword: string;
-	description: string;
+	slug: string;
+	name: string;
+	channel_type: string;
+	config: string;
 }

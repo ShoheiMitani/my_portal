@@ -34,6 +34,15 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["TrendCollectorAgent"]
+    },
+    {
+      "tag": "v2"
+    },
+    {
+      "tag": "v3"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 */1 * * *"]
+  }
 }
