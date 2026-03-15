@@ -135,6 +135,19 @@ export class TrendCollectorAgent extends AIChatAgent<Env> {
 
 		if (url.pathname === "/status") {
 			const state = await this.ctx.storage.get<GenerationState>("genState");
+			if (
+				state?.status === "running" &&
+				state.startedAt &&
+				Date.now() - state.startedAt > STALE_TIMEOUT_MS
+			) {
+				const reset: GenerationState = {
+					status: "error",
+					error: "timeout: alarm did not complete within 15 minutes",
+				};
+				await this.ctx.storage.put<GenerationState>("genState", reset);
+				console.log("[DO] auto-reset stale running state on status check");
+				return Response.json(reset);
+			}
 			return Response.json(state ?? { status: "idle" });
 		}
 

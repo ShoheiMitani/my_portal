@@ -79,6 +79,15 @@ export const trendsPageStyles = `${listPageBaseStyles}
 .empty-state p {
 	margin-bottom: 0.5rem;
 }
+.error-message {
+	background: #fef2f2;
+	color: #b91c1c;
+	border: 1px solid #fecaca;
+	border-radius: 8px;
+	padding: 0.75rem 1rem;
+	font-size: 0.85rem;
+	margin-bottom: 1rem;
+}
 .loading {
 	text-align: center;
 	color: #888;

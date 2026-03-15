@@ -48,6 +48,7 @@ function TopicListView({
 	const [topics, setTopics] = useState<Topic[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [regenerating, setRegenerating] = useState(false);
+	const [genError, setGenError] = useState<string | null>(null);
 
 	const fetchTopics = useCallback(() => {
 		setLoading(true);
@@ -71,11 +72,19 @@ function TopicListView({
 		pollingRef.current = setInterval(async () => {
 			try {
 				const res = await fetch("/api/topics/status");
-				const data = (await res.json()) as { status: string };
+				const data = (await res.json()) as {
+					status: string;
+					error?: string;
+				};
 				if (data.status !== "running") {
 					if (pollingRef.current) clearInterval(pollingRef.current);
 					pollingRef.current = null;
 					setRegenerating(false);
+					if (data.status === "error") {
+						setGenError(data.error ?? "生成中にエラーが発生しました");
+					} else {
+						setGenError(null);
+					}
 					fetchTopics();
 				}
 			} catch {
@@ -100,6 +109,7 @@ function TopicListView({
 
 	const handleRegenerate = async () => {
 		setRegenerating(true);
+		setGenError(null);
 		try {
 			await fetch("/api/topics/generate", {
 				method: "POST",
@@ -140,6 +150,8 @@ function TopicListView({
 					{regenerating ? "強制再生成" : "再生成"}
 				</button>
 			</div>
+
+			{genError && <div className="error-message">{genError}</div>}
 
 			{(loading || regenerating) && (
 				<div className="loading">
