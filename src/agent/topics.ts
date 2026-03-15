@@ -183,6 +183,24 @@ async function saveTopics(
 
 // ─── Workers AI レスポンスのパース ─────────────────────
 
+/** Responses API の output 配列からメッセージテキストを抽出する */
+function extractTextFromResponsesApi(output: unknown[]): string | null {
+	const texts: string[] = [];
+	for (const block of output) {
+		if (typeof block !== "object" || block === null) continue;
+		const b = block as Record<string, unknown>;
+		if (b.type !== "message" || !Array.isArray(b.content)) continue;
+		for (const part of b.content as unknown[]) {
+			if (typeof part !== "object" || part === null) continue;
+			const p = part as Record<string, unknown>;
+			if (typeof p.text === "string") {
+				texts.push(p.text);
+			}
+		}
+	}
+	return texts.length > 0 ? texts.join("") : null;
+}
+
 function extractAIResponse(response: unknown): {
 	text: string;
 	parsed: unknown[] | null;
@@ -191,7 +209,20 @@ function extractAIResponse(response: unknown): {
 		return { text: "", parsed: null };
 	}
 	const resp = response as Record<string, unknown>;
-	const raw = resp.output_text ?? resp.response;
+
+	// Responses API: output_text が最も軽量なのでまず確認
+	if (typeof resp.output_text === "string") {
+		return { text: resp.output_text, parsed: null };
+	}
+
+	// Responses API: output_text がない場合は output 配列からテキスト抽出
+	if (Array.isArray(resp.output)) {
+		const text = extractTextFromResponsesApi(resp.output);
+		if (text) return { text, parsed: null };
+	}
+
+	// 従来の Workers AI 形式: { response: "..." }
+	const raw = resp.response;
 	if (Array.isArray(raw)) return { text: "", parsed: raw };
 	if (typeof raw === "string") return { text: raw, parsed: null };
 	return { text: "", parsed: null };
