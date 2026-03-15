@@ -33,6 +33,9 @@ export function TopPage() {
 				<Link to="/chat" onClick={() => setMenuOpen(false)}>
 					Chat
 				</Link>
+				<Link to="/trends" onClick={() => setMenuOpen(false)}>
+					Trends
+				</Link>
 			</nav>
 			<div className="container">
 				<img

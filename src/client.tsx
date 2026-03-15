@@ -5,6 +5,7 @@ import { TopPage } from "./pages/top";
 import { WorksPage } from "./pages/works";
 import { TalksPage } from "./pages/talks";
 import { ChatPage } from "./pages/chat";
+import { TrendsPage } from "./pages/trends";
 
 const root = document.getElementById("root");
 if (root) {
@@ -15,6 +16,7 @@ if (root) {
 				<Route path="/works" element={<WorksPage />} />
 				<Route path="/talks" element={<TalksPage />} />
 				<Route path="/chat" element={<ChatPage />} />
+				<Route path="/trends" element={<TrendsPage />} />
 			</Routes>
 		</BrowserRouter>,
 	);

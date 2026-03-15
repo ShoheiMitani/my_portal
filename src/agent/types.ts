@@ -1,6 +1,7 @@
 export interface Env {
 	AI: Ai;
 	DB: D1Database;
+	TrendCollector: DurableObjectNamespace;
 }
 
 export interface FeedArticle {

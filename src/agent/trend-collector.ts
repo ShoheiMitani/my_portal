@@ -5,6 +5,7 @@ import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod/v4";
 import { decodeHtmlEntities } from "../lib/xml";
 import { USER_AGENT, crawlAllChannels } from "./crawl";
+import { generateTopics } from "./topics";
 import type { Env } from "./types";
 
 const MAX_ARTICLES = 30;
@@ -88,7 +89,94 @@ function formatArticles(articles: ArticleRow[]): string {
 		.join("\n\n");
 }
 
+interface GenerationState {
+	status: "idle" | "running" | "done" | "error";
+	periods?: string[];
+	result?: { period: string; topicCount: number; articleCount: number }[];
+	error?: string;
+	startedAt?: number;
+}
+
+const STALE_TIMEOUT_MS = 15 * 60 * 1000; // 15分
+
 export class TrendCollectorAgent extends AIChatAgent<Env> {
+	async fetch(request: Request): Promise<Response> {
+		const url = new URL(request.url);
+		console.log(`[DO] fetch: ${request.method} ${url.pathname}`);
+
+		if (url.pathname === "/generate" && request.method === "POST") {
+			const body = (await request.json()) as {
+				periods?: string[];
+				force?: boolean;
+			};
+			const current = await this.ctx.storage.get<GenerationState>("genState");
+			if (current?.status === "running") {
+				if (body.force) {
+					console.log("[DO] force reset requested");
+				} else {
+					const isStale =
+						!current.startedAt ||
+						Date.now() - current.startedAt > STALE_TIMEOUT_MS;
+					if (!isStale) {
+						return Response.json({ status: "already_running" });
+					}
+					console.log("[DO] stale running state detected, resetting");
+				}
+			}
+			const periods = body.periods ?? ["daily"];
+			await this.ctx.storage.put<GenerationState>("genState", {
+				status: "running",
+				periods,
+				startedAt: Date.now(),
+			});
+			await this.ctx.storage.setAlarm(Date.now() + 100);
+			return Response.json({ status: "started", periods });
+		}
+
+		if (url.pathname === "/status") {
+			const state = await this.ctx.storage.get<GenerationState>("genState");
+			return Response.json(state ?? { status: "idle" });
+		}
+
+		return super.fetch(request);
+	}
+
+	async alarm() {
+		console.log("[DO] alarm fired");
+		const state = await this.ctx.storage.get<GenerationState>("genState");
+		if (!state || state.status !== "running") return;
+
+		const results: {
+			period: string;
+			topicCount: number;
+			articleCount: number;
+		}[] = [];
+
+		try {
+			for (const period of state.periods ?? []) {
+				console.log(`[alarm] generating topics for ${period}...`);
+				const result = await generateTopics(
+					this.env,
+					period as "daily" | "weekly",
+				);
+				results.push({ period, ...result });
+			}
+			await this.ctx.storage.put<GenerationState>("genState", {
+				status: "done",
+				periods: state.periods,
+				result: results,
+			});
+			console.log("[alarm] topic generation done:", JSON.stringify(results));
+		} catch (e) {
+			console.error("[alarm] topic generation failed:", e);
+			await this.ctx.storage.put<GenerationState>("genState", {
+				status: "error",
+				periods: state.periods,
+				error: String(e),
+			});
+		}
+	}
+
 	async onChatMessage(
 		onFinish: Parameters<AIChatAgent["onChatMessage"]>[0],
 		options?: OnChatMessageOptions,
@@ -125,7 +213,8 @@ export class TrendCollectorAgent extends AIChatAgent<Env> {
 - 統計を知りたい → getStats
 - チャネル一覧を見たい → listChannels
 - 記事の本文を読みたい → readArticle
-- 最新記事を取得したい → triggerCrawl`,
+- 最新記事を取得したい → triggerCrawl
+- トピックを再生成したい → regenerateTopics`,
 			messages: await convertToModelMessages(this.messages),
 			tools: {
 				getRecentArticles: tool({
@@ -399,6 +488,20 @@ export class TrendCollectorAgent extends AIChatAgent<Env> {
 					inputSchema: z.object({}),
 					execute: async () => {
 						return await crawlAllChannels(db);
+					},
+				}),
+				regenerateTopics: tool({
+					description:
+						"トレンドトピックを再生成する。記事をグルーピングし直して話題のサマリーを作り直す。",
+					inputSchema: z.object({
+						period: z
+							.enum(["daily", "weekly"])
+							.describe("対象期間: daily=直近24時間, weekly=直近1週間"),
+					}),
+					execute: async ({ period }: { period: "daily" | "weekly" }) => {
+						const result = await generateTopics(this.env, period);
+						const label = period === "daily" ? "24時間" : "1週間";
+						return `${label}のトピックを再生成しました。${result.topicCount}件のトピックを${result.articleCount}件の記事から生成しました。`;
 					},
 				}),
 			},

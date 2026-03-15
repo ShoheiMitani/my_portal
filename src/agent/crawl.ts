@@ -1,11 +1,13 @@
 import html2md from "html-to-md";
 import { fetchFeed } from "./feed";
-import type { ArticleWithContent, Channel } from "./types";
+import { fetchNoteArticles } from "./note";
+import type { ArticleWithContent, Channel, FeedArticle } from "./types";
 
 export const USER_AGENT = "Mozilla/5.0 (compatible; TrendCollectorBot/1.0)";
 
 interface ChannelConfig {
 	feed_url?: string;
+	api_url?: string;
 	content_type?: string;
 }
 
@@ -92,6 +94,7 @@ async function fetchArticleContent(url: string): Promise<string> {
 
 const CONCURRENCY_LIMIT = 5;
 const FEED_MAX_AGE_DAYS = 30;
+const NOTE_API_MAX_AGE_DAYS = 1;
 
 async function mapWithConcurrency<T, R>(
 	items: T[],
@@ -113,24 +116,15 @@ async function mapWithConcurrency<T, R>(
 }
 
 /**
- * 単一チャネルをクロールする
+ * 記事リストからDB未登録分を抽出し、本文取得してDBに保存する共通処理
  */
-export async function crawlChannel(db: D1Database, channel: Channel) {
-	const config = parseChannelConfig(channel);
-	if (!config.feed_url) return { articlesFound: 0, articlesNew: 0 };
-
-	console.log(`[crawl] ${channel.name}: fetching feed...`);
-	const allArticles = await fetchFeed(config.feed_url);
-
-	// 直近N日以内の記事のみ対象
-	const cutoff = new Date(Date.now() - FEED_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
-	const articles = allArticles.filter((a) => {
-		if (!a.publishedAt) return true; // 日付なしは対象にする
-		return new Date(a.publishedAt) >= cutoff;
-	});
-	console.log(
-		`[crawl] ${channel.name}: ${allArticles.length} in feed, ${articles.length} within ${FEED_MAX_AGE_DAYS} days`,
-	);
+async function filterAndStoreArticles(
+	db: D1Database,
+	channel: Channel,
+	articles: FeedArticle[],
+	config: ChannelConfig,
+) {
+	if (articles.length === 0) return { articlesFound: 0, articlesNew: 0 };
 
 	// DB に既に存在するURLを取得してスキップ
 	const urls = articles.map((a) => a.url);
@@ -173,12 +167,43 @@ export async function crawlChannel(db: D1Database, channel: Channel) {
 }
 
 /**
+ * 単一チャネルをクロールする
+ */
+export async function crawlChannel(db: D1Database, channel: Channel) {
+	const config = parseChannelConfig(channel);
+
+	if (channel.channel_type === "note_api") {
+		if (!config.api_url) return { articlesFound: 0, articlesNew: 0 };
+		console.log(`[crawl] ${channel.name}: fetching note API...`);
+		const articles = await fetchNoteArticles(config.api_url, {
+			maxAgeDays: NOTE_API_MAX_AGE_DAYS,
+		});
+		console.log(`[crawl] ${channel.name}: ${articles.length} from API`);
+		return filterAndStoreArticles(db, channel, articles, config);
+	}
+
+	if (!config.feed_url) return { articlesFound: 0, articlesNew: 0 };
+	console.log(`[crawl] ${channel.name}: fetching feed...`);
+	const allArticles = await fetchFeed(config.feed_url);
+
+	const cutoff = new Date(Date.now() - FEED_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
+	const articles = allArticles.filter((a) => {
+		if (!a.publishedAt) return true;
+		return new Date(a.publishedAt) >= cutoff;
+	});
+	console.log(
+		`[crawl] ${channel.name}: ${allArticles.length} in feed, ${articles.length} within ${FEED_MAX_AGE_DAYS} days`,
+	);
+	return filterAndStoreArticles(db, channel, articles, config);
+}
+
+/**
  * 全フィードチャネルをクロールする（cron用）
  */
 export async function crawlAllChannels(db: D1Database) {
 	const { results: channels } = await db
 		.prepare(
-			"SELECT id, slug, name, channel_type, config FROM channels WHERE channel_type IN ('rss', 'atom')",
+			"SELECT id, slug, name, channel_type, config FROM channels WHERE channel_type IN ('rss', 'atom', 'note_api')",
 		)
 		.all<Channel>();
 
