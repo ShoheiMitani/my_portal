@@ -331,7 +331,13 @@ async function annotateChunk(
 	);
 
 	const items = parseAIItems(response);
-	if (!items) return [];
+	if (!items) {
+		console.error(
+			"[topics] annotation parse failed, raw response:",
+			JSON.stringify(response).slice(0, 500),
+		);
+		return [];
+	}
 
 	const validIds = new Set(articles.map((a) => a.id));
 	return validateAnnotations(items).filter((a) => validIds.has(a.id));
@@ -382,7 +388,13 @@ async function groupWithinCategory(
 	);
 
 	const items = parseAIItems(response);
-	if (!items) return [];
+	if (!items) {
+		console.error(
+			`[topics] grouping parse failed for "${group.category}", raw response:`,
+			JSON.stringify(response).slice(0, 500),
+		);
+		return [];
+	}
 	return validateTopicGroups(items, allValidIds);
 }
 
