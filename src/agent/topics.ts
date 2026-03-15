@@ -187,14 +187,11 @@ function extractAIResponse(response: unknown): {
 	text: string;
 	parsed: unknown[] | null;
 } {
-	if (
-		typeof response !== "object" ||
-		response === null ||
-		!("response" in response)
-	) {
+	if (typeof response !== "object" || response === null) {
 		return { text: "", parsed: null };
 	}
-	const raw = (response as Record<string, unknown>).response;
+	const resp = response as Record<string, unknown>;
+	const raw = resp.output_text ?? resp.response;
 	if (Array.isArray(raw)) return { text: "", parsed: raw };
 	if (typeof raw === "string") return { text: raw, parsed: null };
 	return { text: "", parsed: null };
@@ -326,8 +323,8 @@ async function annotateChunk(
 	const response = await withRetry(
 		() =>
 			ai.run(AI_MODEL, {
-				messages: [{ role: "user", content: prompt }],
-				max_tokens: 2048,
+				input: prompt,
+				max_output_tokens: 2048,
 			}),
 		MAX_RETRIES,
 		RETRY_DELAY_MS,
@@ -377,8 +374,8 @@ async function groupWithinCategory(
 	const response = await withRetry(
 		() =>
 			ai.run(AI_MODEL, {
-				messages: [{ role: "user", content: prompt }],
-				max_tokens: 2048,
+				input: prompt,
+				max_output_tokens: 2048,
 			}),
 		MAX_RETRIES,
 		RETRY_DELAY_MS,
