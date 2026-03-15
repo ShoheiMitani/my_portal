@@ -355,7 +355,7 @@ async function annotateChunk(
 		() =>
 			ai.run(AI_MODEL, {
 				input: prompt,
-				max_output_tokens: 2048,
+				max_output_tokens: 16384,
 			}),
 		MAX_RETRIES,
 		RETRY_DELAY_MS,
@@ -412,7 +412,7 @@ async function groupWithinCategory(
 		() =>
 			ai.run(AI_MODEL, {
 				input: prompt,
-				max_output_tokens: 2048,
+				max_output_tokens: 16384,
 			}),
 		MAX_RETRIES,
 		RETRY_DELAY_MS,
