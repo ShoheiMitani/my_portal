@@ -28,6 +28,7 @@
       ]
     }
   },
+  "packageManager": "pnpm@10.29.1",
   "type": "module",
   "dependencies": {
     "@cloudflare/ai-chat": "^0.1.8",

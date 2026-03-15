@@ -17,6 +17,12 @@ vi.mock("../agent/crawl", () => ({
 	USER_AGENT: "TestBot/1.0",
 }));
 
+vi.mock("../agent/topics", () => ({
+	parsePeriod: vi.fn((v: string) =>
+		["daily", "weekly"].includes(v) ? v : null,
+	),
+}));
+
 describe("GET /api/feeds/blog", () => {
 	beforeEach(() => {
 		stubFetchForBlog(hatenaRssSingle);
@@ -73,7 +79,17 @@ describe("GET /api/feeds/slides", () => {
 	});
 });
 
-const mockEnv = { DB: {} as D1Database, AI: {} as Ai };
+const mockStub = {
+	fetch: vi.fn().mockResolvedValue(Response.json({ status: "started" })),
+};
+const mockEnv = {
+	DB: {} as D1Database,
+	AI: {} as Ai,
+	TrendCollector: {
+		idFromName: () => "test-id",
+		get: () => mockStub,
+	} as unknown as DurableObjectNamespace,
+};
 
 describe("POST /api/crawl", () => {
 	afterEach(() => {
@@ -107,11 +123,9 @@ describe("scheduled handler", () => {
 		const mockWaitUntil = vi.fn((p: Promise<unknown>) => p);
 
 		const handler = (await import("../index")).default;
-		await handler.scheduled(
-			{} as ScheduledEvent,
-			{ DB: {} as D1Database, AI: {} as Ai },
-			{ waitUntil: mockWaitUntil } as unknown as ExecutionContext,
-		);
+		await handler.scheduled({} as ScheduledEvent, mockEnv, {
+			waitUntil: mockWaitUntil,
+		} as unknown as ExecutionContext);
 
 		expect(crawlAllChannels).toHaveBeenCalled();
 		expect(mockWaitUntil).toHaveBeenCalled();
