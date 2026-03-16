@@ -80,3 +80,35 @@ export async function processSlackUrls(
 
 	return filterAndStoreArticles(db, channel, articles, config);
 }
+
+/**
+ * Slackスレッドに取り込み完了通知を送信する
+ */
+export async function notifySlackThread(
+	token: string,
+	channel: string,
+	threadTs: string,
+	result: { articlesFound: number; articlesNew: number },
+): Promise<void> {
+	const text =
+		result.articlesNew > 0
+			? `${result.articlesNew}件の記事を取り込みました`
+			: "すべて取り込み済みの記事です";
+
+	const res = await fetch("https://slack.com/api/chat.postMessage", {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${token}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			channel,
+			thread_ts: threadTs,
+			text,
+		}),
+	});
+	const data = (await res.json()) as { ok: boolean; error?: string };
+	if (!data.ok) {
+		console.error("[slack] chat.postMessage failed:", data.error);
+	}
+}

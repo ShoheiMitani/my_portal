@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
 	extractUrls,
+	notifySlackThread,
 	processSlackUrls,
 	verifySlackSignature,
 } from "../../agent/slack";
@@ -182,5 +183,54 @@ describe("processSlackUrls", () => {
 		const result = await processSlackUrls(db, ["https://example.com/post"]);
 
 		expect(result.articlesNew).toBe(0);
+	});
+});
+
+describe("notifySlackThread", () => {
+	it("新規記事ありの場合に取り込み件数を通知する", async () => {
+		const mockFetch = vi
+			.spyOn(globalThis, "fetch")
+			.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+
+		await notifySlackThread("xoxb-token", "C123", "1234567890.123456", {
+			articlesFound: 2,
+			articlesNew: 1,
+		});
+
+		expect(mockFetch).toHaveBeenCalledWith(
+			"https://slack.com/api/chat.postMessage",
+			expect.objectContaining({
+				method: "POST",
+				body: JSON.stringify({
+					channel: "C123",
+					thread_ts: "1234567890.123456",
+					text: "1件の記事を取り込みました",
+				}),
+			}),
+		);
+		mockFetch.mockRestore();
+	});
+
+	it("すべて取り込み済みの場合にその旨を通知する", async () => {
+		const mockFetch = vi
+			.spyOn(globalThis, "fetch")
+			.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+
+		await notifySlackThread("xoxb-token", "C123", "1234567890.123456", {
+			articlesFound: 1,
+			articlesNew: 0,
+		});
+
+		expect(mockFetch).toHaveBeenCalledWith(
+			"https://slack.com/api/chat.postMessage",
+			expect.objectContaining({
+				body: JSON.stringify({
+					channel: "C123",
+					thread_ts: "1234567890.123456",
+					text: "すべて取り込み済みの記事です",
+				}),
+			}),
+		);
+		mockFetch.mockRestore();
 	});
 });

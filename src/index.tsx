@@ -3,6 +3,7 @@ import { agentsMiddleware } from "hono-agents";
 import { crawlAllChannels } from "./agent/crawl";
 import {
 	extractUrls,
+	notifySlackThread,
 	processSlackUrls,
 	verifySlackSignature,
 } from "./agent/slack";
@@ -96,6 +97,8 @@ app.post("/api/slack/events", async (c) => {
 			type: string;
 			text?: string;
 			bot_id?: string;
+			channel?: string;
+			ts?: string;
 		};
 	};
 	try {
@@ -125,10 +128,23 @@ app.post("/api/slack/events", async (c) => {
 		}
 
 		const urls = extractUrls(payload.event.text ?? "");
+		const eventChannel = payload.event.channel;
+		const eventTs = payload.event.ts;
 		if (urls.length > 0) {
-			const task = processSlackUrls(c.env.DB, urls).catch((e) => {
-				console.error("[slack] processSlackUrls error:", e);
-			});
+			const task = processSlackUrls(c.env.DB, urls)
+				.then((result) => {
+					if (eventChannel != null && eventTs != null) {
+						return notifySlackThread(
+							c.env.SLACK_BOT_TOKEN,
+							eventChannel,
+							eventTs,
+							result,
+						);
+					}
+				})
+				.catch((e) => {
+					console.error("[slack] error:", e);
+				});
 			c.executionCtx.waitUntil(task);
 		}
 	}

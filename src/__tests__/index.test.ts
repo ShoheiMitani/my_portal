@@ -24,6 +24,7 @@ vi.mock("../agent/slack", () => ({
 	processSlackUrls: vi
 		.fn()
 		.mockResolvedValue({ articlesFound: 1, articlesNew: 1 }),
+	notifySlackThread: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../agent/topics", () => ({
@@ -103,6 +104,7 @@ const mockEnv = {
 		get: () => mockStub,
 	} as unknown as DurableObjectNamespace,
 	SLACK_SIGNING_SECRET: "test_secret",
+	SLACK_BOT_TOKEN: "xoxb-test-token",
 };
 
 describe("POST /api/crawl", () => {
