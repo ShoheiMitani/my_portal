@@ -2,6 +2,8 @@ export interface Env {
 	AI: Ai;
 	DB: D1Database;
 	TrendCollector: DurableObjectNamespace;
+	SLACK_SIGNING_SECRET: string;
+	SLACK_BOT_TOKEN: string;
 }
 
 export interface FeedArticle {

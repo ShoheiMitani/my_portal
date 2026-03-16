@@ -33,6 +33,9 @@ export function TopPage() {
 				<Link to="/chat" onClick={() => setMenuOpen(false)}>
 					Chat
 				</Link>
+				<Link to="/articles" onClick={() => setMenuOpen(false)}>
+					Articles
+				</Link>
 				<Link to="/trends" onClick={() => setMenuOpen(false)}>
 					Trends
 				</Link>

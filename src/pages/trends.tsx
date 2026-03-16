@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ListPageLayout } from "./components/list-layout";
 import { trendsPageStyles } from "../styles/trends";
+import { timeAgo } from "../lib/dates";
 
 interface Topic {
 	id: string;
@@ -26,15 +27,6 @@ interface TopicDetail extends Topic {
 }
 
 type PeriodType = "daily" | "weekly";
-
-function timeAgo(dateStr: string): string {
-	const diff = Date.now() - new Date(dateStr).getTime();
-	const hours = Math.floor(diff / (1000 * 60 * 60));
-	if (hours < 1) return "1時間以内";
-	if (hours < 24) return `${hours}時間前`;
-	const days = Math.floor(hours / 24);
-	return `${days}日前`;
-}
 
 function TopicListView({
 	period,

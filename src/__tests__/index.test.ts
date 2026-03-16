@@ -15,6 +15,16 @@ vi.mock("../agent/crawl", () => ({
 			{ channel: "test_rss", articlesFound: 3, articlesNew: 1 },
 		]),
 	USER_AGENT: "TestBot/1.0",
+	filterAndStoreArticles: vi.fn(),
+}));
+
+vi.mock("../agent/slack", () => ({
+	verifySlackSignature: vi.fn().mockResolvedValue(true),
+	extractUrls: vi.fn().mockReturnValue(["https://example.com/article"]),
+	processSlackUrls: vi
+		.fn()
+		.mockResolvedValue({ articlesFound: 1, articlesNew: 1 }),
+	notifySlackThread: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../agent/topics", () => ({
@@ -82,6 +92,10 @@ describe("GET /api/feeds/slides", () => {
 const mockStub = {
 	fetch: vi.fn().mockResolvedValue(Response.json({ status: "started" })),
 };
+const mockExecutionCtx = {
+	waitUntil: vi.fn(),
+	passThroughOnException: vi.fn(),
+} as unknown as ExecutionContext;
 const mockEnv = {
 	DB: {} as D1Database,
 	AI: {} as Ai,
@@ -89,6 +103,8 @@ const mockEnv = {
 		idFromName: () => "test-id",
 		get: () => mockStub,
 	} as unknown as DurableObjectNamespace,
+	SLACK_SIGNING_SECRET: "test_secret",
+	SLACK_BOT_TOKEN: "xoxb-test-token",
 };
 
 describe("POST /api/crawl", () => {
@@ -112,6 +128,130 @@ describe("POST /api/crawl", () => {
 
 	it("returns JSON content type", async () => {
 		const res = await app.request("/api/crawl", { method: "POST" }, mockEnv);
+		expect(res.headers.get("content-type")).toContain("application/json");
+	});
+});
+
+describe("POST /api/slack/events", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("url_verificationにchallengeを返す", async () => {
+		const body = JSON.stringify({
+			type: "url_verification",
+			challenge: "test_challenge_value",
+		});
+		const res = await app.request(
+			"/api/slack/events",
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-Slack-Signature": "v0=dummy",
+					"X-Slack-Request-Timestamp": String(Math.floor(Date.now() / 1000)),
+				},
+				body,
+			},
+			mockEnv,
+		);
+		expect(res.status).toBe(200);
+		const data = (await res.json()) as { challenge: string };
+		expect(data.challenge).toBe("test_challenge_value");
+	});
+
+	it("署名検証失敗で401を返す", async () => {
+		const { verifySlackSignature } = await import("../agent/slack");
+		vi.mocked(verifySlackSignature).mockResolvedValueOnce(false);
+
+		const body = JSON.stringify({
+			type: "event_callback",
+			event: { type: "message", text: "hello" },
+		});
+		const res = await app.request(
+			"/api/slack/events",
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-Slack-Signature": "v0=invalid",
+					"X-Slack-Request-Timestamp": String(Math.floor(Date.now() / 1000)),
+				},
+				body,
+			},
+			mockEnv,
+		);
+		expect(res.status).toBe(401);
+	});
+
+	it("メッセージイベントで200を返す", async () => {
+		const body = JSON.stringify({
+			type: "event_callback",
+			event: {
+				type: "message",
+				text: "<https://example.com/article|example>",
+			},
+		});
+		const res = await app.request(
+			"/api/slack/events",
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-Slack-Signature": "v0=dummy",
+					"X-Slack-Request-Timestamp": String(Math.floor(Date.now() / 1000)),
+				},
+				body,
+			},
+			mockEnv,
+			mockExecutionCtx,
+		);
+		expect(res.status).toBe(200);
+	});
+
+	it("botメッセージはスキップする", async () => {
+		const { processSlackUrls } = await import("../agent/slack");
+		vi.mocked(processSlackUrls).mockClear();
+
+		const body = JSON.stringify({
+			type: "event_callback",
+			event: {
+				type: "message",
+				text: "<https://example.com/article>",
+				bot_id: "B12345",
+			},
+		});
+		const res = await app.request(
+			"/api/slack/events",
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-Slack-Signature": "v0=dummy",
+					"X-Slack-Request-Timestamp": String(Math.floor(Date.now() / 1000)),
+				},
+				body,
+			},
+			mockEnv,
+		);
+		expect(res.status).toBe(200);
+		expect(processSlackUrls).not.toHaveBeenCalled();
+	});
+});
+
+describe("GET /api/articles", () => {
+	it("returns 200 with JSON", async () => {
+		const mockDb = {
+			prepare: () => ({
+				bind: () => ({
+					all: vi.fn().mockResolvedValue({ results: [] }),
+				}),
+			}),
+		} as unknown as D1Database;
+		const env = { ...mockEnv, DB: mockDb };
+
+		const res = await app.request("/api/articles", {}, env);
+		expect(res.status).toBe(200);
 		expect(res.headers.get("content-type")).toContain("application/json");
 	});
 });
