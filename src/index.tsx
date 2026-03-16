@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import { agentsMiddleware } from "hono-agents";
 import { crawlAllChannels } from "./agent/crawl";
+import {
+	extractUrls,
+	processSlackUrls,
+	verifySlackSignature,
+} from "./agent/slack";
 import { parsePeriod } from "./agent/topics";
 import type { Env } from "./agent/types";
 import { fetchHatenaBlog, fetchSpeakerDeck } from "./lib/feeds";
@@ -77,6 +82,95 @@ app.get("/api/topics/status", async (c) => {
 	const stub = getTopicGeneratorStub(c.env);
 	const res = await stub.fetch(new Request("http://do/status"));
 	return c.json(await res.json());
+});
+
+app.post("/api/slack/events", async (c) => {
+	const body = await c.req.text();
+	const timestamp = c.req.header("X-Slack-Request-Timestamp") ?? "";
+	const signature = c.req.header("X-Slack-Signature") ?? "";
+
+	let payload: {
+		type: string;
+		challenge?: string;
+		event?: {
+			type: string;
+			text?: string;
+			bot_id?: string;
+		};
+	};
+	try {
+		payload = JSON.parse(body);
+	} catch {
+		return c.json({ error: "invalid JSON" }, 400);
+	}
+
+	// url_verificationはsigning secretの設定前に来る可能性があるので先に処理
+	if (payload.type === "url_verification") {
+		return c.json({ challenge: payload.challenge });
+	}
+
+	const valid = await verifySlackSignature(
+		c.env.SLACK_SIGNING_SECRET,
+		timestamp,
+		body,
+		signature,
+	);
+	if (!valid) {
+		return c.json({ error: "invalid signature" }, 401);
+	}
+
+	if (payload.type === "event_callback" && payload.event?.type === "message") {
+		if (payload.event.bot_id) {
+			return c.json({ ok: true });
+		}
+
+		const urls = extractUrls(payload.event.text ?? "");
+		if (urls.length > 0) {
+			const task = processSlackUrls(c.env.DB, urls).catch((e) => {
+				console.error("[slack] processSlackUrls error:", e);
+			});
+			c.executionCtx.waitUntil(task);
+		}
+	}
+
+	return c.json({ ok: true });
+});
+
+app.get("/api/articles", async (c) => {
+	const source = c.req.query("source");
+	const limit = Number(c.req.query("limit") ?? "50");
+	const offset = Number(c.req.query("offset") ?? "0");
+
+	let whereClause = "";
+	const bindParams: unknown[] = [];
+
+	if (source === "slack") {
+		whereClause = "AND ch.channel_type = ?";
+		bindParams.push("slack");
+	} else if (source === "crawler") {
+		whereClause = "AND ch.channel_type IN (?, ?, ?)";
+		bindParams.push("rss", "atom", "note_api");
+	}
+
+	bindParams.push(limit, offset);
+
+	const { results } = await c.env.DB.prepare(
+		`SELECT a.id, a.url, a.title, a.description, a.content_type,
+		        a.published_at, a.created_at,
+		        MAX(ch.name) as channel_name, MAX(ch.channel_type) as channel_type
+		 FROM articles a
+		 LEFT JOIN collection_items ci ON a.id = ci.article_id
+		 LEFT JOIN collection_runs cr ON ci.collection_run_id = cr.id
+		 LEFT JOIN channels ch ON cr.channel_id = ch.id
+		 WHERE 1=1 ${whereClause}
+		 GROUP BY a.id
+		 ORDER BY a.created_at DESC
+		 LIMIT ? OFFSET ?`,
+	)
+		.bind(...bindParams)
+		.all();
+
+	return c.json(results);
 });
 
 app.get("/api/topics/:id", async (c) => {

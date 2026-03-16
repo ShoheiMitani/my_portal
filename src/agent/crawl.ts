@@ -118,7 +118,7 @@ async function mapWithConcurrency<T, R>(
 /**
  * 記事リストからDB未登録分を抽出し、本文取得してDBに保存する共通処理
  */
-async function filterAndStoreArticles(
+export async function filterAndStoreArticles(
 	db: D1Database,
 	channel: Channel,
 	articles: FeedArticle[],
