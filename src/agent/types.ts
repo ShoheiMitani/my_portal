@@ -4,6 +4,9 @@ export interface Env {
 	TrendCollector: DurableObjectNamespace;
 	SLACK_SIGNING_SECRET: string;
 	SLACK_BOT_TOKEN: string;
+	X_CLIENT_ID: string;
+	X_CLIENT_SECRET: string;
+	X_USER_ID: string;
 }
 
 export interface FeedArticle {

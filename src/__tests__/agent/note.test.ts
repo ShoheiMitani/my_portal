@@ -5,7 +5,6 @@ import {
 	isGameRelated,
 	parseNoteApiResponse,
 } from "../../agent/note";
-import type { FeedArticle } from "../../agent/types";
 
 const NOW = new Date("2026-03-15T12:00:00Z");
 

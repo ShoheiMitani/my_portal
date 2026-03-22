@@ -105,6 +105,9 @@ const mockEnv = {
 	} as unknown as DurableObjectNamespace,
 	SLACK_SIGNING_SECRET: "test_secret",
 	SLACK_BOT_TOKEN: "xoxb-test-token",
+	X_CLIENT_ID: "test-x-client-id",
+	X_CLIENT_SECRET: "test-x-client-secret",
+	X_USER_ID: "test-x-user-id",
 };
 
 describe("POST /api/crawl", () => {

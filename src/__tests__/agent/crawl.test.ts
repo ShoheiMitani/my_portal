@@ -7,17 +7,7 @@ import {
 import type { ArticleWithContent, Channel } from "../../agent/types";
 
 function createMockDb() {
-	const batchResults: { meta: { changes: number } }[] = [];
 	const preparedStmts: { sql: string; binds: unknown[] }[] = [];
-
-	const mockStmt = {
-		bind: (...args: unknown[]) => {
-			preparedStmts.push({ sql: "bound", binds: args });
-			return mockStmt;
-		},
-		run: vi.fn().mockResolvedValue({ meta: { changes: 1 } }),
-		all: vi.fn().mockResolvedValue({ results: [] }),
-	};
 
 	const db = {
 		prepare: (sql: string) => {

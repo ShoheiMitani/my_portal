@@ -33,7 +33,7 @@ app.get("/api/feeds/slides", async (c) => {
 });
 
 app.post("/api/crawl", async (c) => {
-	const results = await crawlAllChannels(c.env.DB);
+	const results = await crawlAllChannels(c.env.DB, c.env);
 	return c.json(results);
 });
 
@@ -166,6 +166,9 @@ app.get("/api/articles", async (c) => {
 	} else if (source === "crawler") {
 		whereClause = "AND ch.channel_type IN (?, ?, ?)";
 		bindParams.push("rss", "atom", "note_api");
+	} else if (source === "x_bookmarks") {
+		whereClause = "AND ch.channel_type = ?";
+		bindParams.push("x_bookmarks");
 	}
 
 	bindParams.push(limit, offset);
@@ -220,7 +223,7 @@ export default {
 	fetch: app.fetch,
 	async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
 		ctx.waitUntil(
-			crawlAllChannels(env.DB)
+			crawlAllChannels(env.DB, env)
 				.then(async (results) => {
 					console.log("Crawl results:", JSON.stringify(results));
 					const hasNew = results.some((r) => r.articlesNew > 0);

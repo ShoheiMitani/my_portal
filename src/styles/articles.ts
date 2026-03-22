@@ -73,6 +73,10 @@ export const articlesPageStyles = `${listPageBaseStyles}
 	background: #fef3c7;
 	color: #92400e;
 }
+.source-badge.x-bookmarks {
+	background: #f3e8ff;
+	color: #6b21a8;
+}
 .empty-state {
 	text-align: center;
 	color: #888;
