@@ -1,7 +1,8 @@
 import html2md from "html-to-md";
 import { fetchFeed } from "./feed";
 import { fetchNoteArticles } from "./note";
-import type { ArticleWithContent, Channel, FeedArticle } from "./types";
+import type { ArticleWithContent, Channel, Env, FeedArticle } from "./types";
+import { processXBookmarks } from "./x-bookmarks";
 
 export const USER_AGENT = "Mozilla/5.0 (compatible; TrendCollectorBot/1.0)";
 
@@ -75,20 +76,47 @@ export async function collectFeedArticles(
 /**
  * 記事URLからHTMLを取得し、本文をmarkdownに変換する
  */
-async function fetchArticleContent(url: string): Promise<string> {
+const HTML_ENTITIES: Record<string, string> = {
+	"&amp;": "&",
+	"&lt;": "<",
+	"&gt;": ">",
+	"&quot;": '"',
+	"&#39;": "'",
+	"&apos;": "'",
+};
+
+function decodeHtmlEntities(text: string): string {
+	return text.replace(
+		/&(?:amp|lt|gt|quot|#39|apos);/g,
+		(m) => HTML_ENTITIES[m] ?? m,
+	);
+}
+
+function extractTitle(html: string): string {
+	const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+	return match ? decodeHtmlEntities(match[1].trim()) : "";
+}
+
+async function fetchArticleContent(
+	url: string,
+	resolveTitle = false,
+): Promise<{ content: string; title: string }> {
 	try {
 		const res = await fetch(url, {
 			headers: { "User-Agent": USER_AGENT },
 		});
 		if (!res.ok) {
 			console.log(`[crawl] fetch failed: ${url} (HTTP ${res.status})`);
-			return "";
+			return { content: "", title: "" };
 		}
 		const html = await res.text();
-		return html2md(html);
+		return {
+			content: html2md(html),
+			title: resolveTitle ? extractTitle(html) : "",
+		};
 	} catch (e) {
 		console.log(`[crawl] fetch error: ${url} (${e})`);
-		return "";
+		return { content: "", title: "" };
 	}
 }
 
@@ -144,12 +172,17 @@ export async function filterAndStoreArticles(
 	const articlesWithContent = await mapWithConcurrency(
 		newArticles,
 		async (article) => {
-			const content = await fetchArticleContent(article.url);
-			done++;
-			console.log(
-				`[crawl] ${channel.name}: content ${done}/${newArticles.length} - ${article.title}`,
+			const needsTitle = article.title === article.url;
+			const { content, title } = await fetchArticleContent(
+				article.url,
+				needsTitle,
 			);
-			return { ...article, content };
+			done++;
+			const resolvedTitle = title || article.title;
+			console.log(
+				`[crawl] ${channel.name}: content ${done}/${newArticles.length} - ${resolvedTitle}`,
+			);
+			return { ...article, title: resolvedTitle, content };
 		},
 		CONCURRENCY_LIMIT,
 	);
@@ -200,28 +233,45 @@ export async function crawlChannel(db: D1Database, channel: Channel) {
 /**
  * 全フィードチャネルをクロールする（cron用）
  */
-export async function crawlAllChannels(db: D1Database) {
+export async function crawlAllChannels(db: D1Database, env?: Env) {
 	const { results: channels } = await db
 		.prepare(
 			"SELECT id, slug, name, channel_type, config FROM channels WHERE channel_type IN ('rss', 'atom', 'note_api')",
 		)
 		.all<Channel>();
 
-	console.log(`[crawl] starting: ${channels.length} channels`);
-
-	const settled = await Promise.allSettled(
-		channels.map((channel) => crawlChannel(db, channel)),
+	const includeXBookmarks = !!(
+		env?.X_CLIENT_ID &&
+		env?.X_CLIENT_SECRET &&
+		env?.X_USER_ID
 	);
-	const results = channels.map((channel, i) => {
+	console.log(
+		`[crawl] starting: ${channels.length} channels${includeXBookmarks ? " + x_bookmarks" : ""}`,
+	);
+
+	type CrawlTask = {
+		slug: string;
+		promise: Promise<{ articlesFound: number; articlesNew: number }>;
+	};
+	const tasks: CrawlTask[] = channels.map((ch) => ({
+		slug: ch.slug,
+		promise: crawlChannel(db, ch),
+	}));
+	if (includeXBookmarks && env) {
+		tasks.push({ slug: "x_bookmarks", promise: processXBookmarks(db, env) });
+	}
+
+	const settled = await Promise.allSettled(tasks.map((t) => t.promise));
+	const results = tasks.map((task, i) => {
 		const outcome = settled[i];
 		if (outcome.status === "rejected") {
-			console.log(`[crawl] ${channel.name}: FAILED (${outcome.reason})`);
+			console.log(`[crawl] ${task.slug}: FAILED (${outcome.reason})`);
 		}
 		const result =
 			outcome.status === "fulfilled"
 				? outcome.value
 				: { articlesFound: 0, articlesNew: 0 };
-		return { channel: channel.slug, ...result };
+		return { channel: task.slug, ...result };
 	});
 
 	console.log("[crawl] all channels done");

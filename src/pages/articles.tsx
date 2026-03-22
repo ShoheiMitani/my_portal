@@ -16,7 +16,7 @@ interface Article {
 	channel_type: string | null;
 }
 
-type SourceFilter = "all" | "crawler" | "slack";
+type SourceFilter = "all" | "crawler" | "slack" | "x_bookmarks";
 
 const PAGE_SIZE = 50;
 
@@ -25,6 +25,8 @@ function sourceLabel(channelType: string | null): {
 	className: string;
 } {
 	if (channelType === "slack") return { text: "Slack", className: "slack" };
+	if (channelType === "x_bookmarks")
+		return { text: "X Bookmarks", className: "x-bookmarks" };
 	return { text: "Crawler", className: "crawler" };
 }
 
@@ -69,14 +71,21 @@ export function ArticlesPage() {
 		<ListPageLayout title="Articles" styles={articlesPageStyles}>
 			<div className="toolbar">
 				<div className="tabs">
-					{(["all", "crawler", "slack"] as const).map((s) => (
+					{(
+						[
+							["all", "全て"],
+							["crawler", "Crawler"],
+							["slack", "Slack"],
+							["x_bookmarks", "X Bookmarks"],
+						] as const
+					).map(([key, label]) => (
 						<button
-							key={s}
+							key={key}
 							type="button"
-							className={`tab ${source === s ? "active" : ""}`}
-							onClick={() => setSource(s)}
+							className={`tab ${source === key ? "active" : ""}`}
+							onClick={() => setSource(key as SourceFilter)}
 						>
-							{s === "all" ? "全て" : s === "crawler" ? "Crawler" : "Slack"}
+							{label}
 						</button>
 					))}
 				</div>

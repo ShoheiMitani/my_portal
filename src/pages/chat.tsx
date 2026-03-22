@@ -59,7 +59,11 @@ export function ChatPage() {
 							{msg.parts.map((part, partIndex) => {
 								if (part.type === "text" || part.type === "reasoning") {
 									return (
-										<div key={`${msg.id}-text-${partIndex}`} className="text">
+										<div
+											// biome-ignore lint/suspicious/noArrayIndexKey: parts order is stable
+											key={`${msg.id}-text-${partIndex}`}
+											className="text"
+										>
 											{part.text}
 										</div>
 									);
@@ -67,6 +71,7 @@ export function ChatPage() {
 								if (part.type.startsWith("tool-")) {
 									return (
 										<div
+											// biome-ignore lint/suspicious/noArrayIndexKey: parts order is stable
 											key={`${msg.id}-tool-${partIndex}`}
 											className="tool-call"
 										>
