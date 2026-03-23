@@ -11,7 +11,7 @@ export default defineConfig({
 	},
 	plugins: [
 		react({
-			include: ["src/chat/**/*.tsx", "src/pages/**/*.tsx"],
+			include: ["src/pages/**/*.tsx"],
 		}),
 		cloudflare(),
 		{
