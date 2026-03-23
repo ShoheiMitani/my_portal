@@ -72,15 +72,27 @@ describe("parseLLMResponse", () => {
 		expect(result[0].article_ids).toEqual(["a1", "a2"]);
 	});
 
-	it("article_idが2件未満のグループは除外される", () => {
+	it("article_idが1件のグループも含まれる（source_count降順でソートされる）", () => {
 		const text = `[
 			{"title": "1件だけ", "summary": "概要", "article_ids": ["a1"]},
 			{"title": "2件以上", "summary": "概要", "article_ids": ["a3", "a4"]}
 		]`;
 
 		const result = parseLLMResponse(text, ARTICLES);
-		expect(result).toHaveLength(1);
+		expect(result).toHaveLength(2);
 		expect(result[0].title).toBe("2件以上");
+		expect(result[1].title).toBe("1件だけ");
+	});
+
+	it("article_idが0件のグループは除外される", () => {
+		const text = `[
+			{"title": "0件", "summary": "概要", "article_ids": []},
+			{"title": "1件", "summary": "概要", "article_ids": ["a1"]}
+		]`;
+
+		const result = parseLLMResponse(text, ARTICLES);
+		expect(result).toHaveLength(1);
+		expect(result[0].title).toBe("1件");
 	});
 
 	it("不正なJSONの場合は空配列を返す", () => {
@@ -97,6 +109,23 @@ describe("parseLLMResponse", () => {
 		const result = parseLLMResponse(text, ARTICLES);
 		expect(result).toHaveLength(1);
 		expect(result[0].title).toBe("正常");
+	});
+
+	it("トピックがsource_count降順でソートされる", () => {
+		const text = `[
+			{"title": "1件トピック", "summary": "概要", "article_ids": ["a1"]},
+			{"title": "3件トピック", "summary": "概要", "article_ids": ["a1", "a2", "a3"]},
+			{"title": "2件トピック", "summary": "概要", "article_ids": ["a3", "a4"]}
+		]`;
+
+		const result = parseLLMResponse(text, ARTICLES);
+		expect(result).toHaveLength(3);
+		expect(result[0].title).toBe("3件トピック");
+		expect(result[0].article_ids).toHaveLength(3);
+		expect(result[1].title).toBe("2件トピック");
+		expect(result[1].article_ids).toHaveLength(2);
+		expect(result[2].title).toBe("1件トピック");
+		expect(result[2].article_ids).toHaveLength(1);
 	});
 
 	it("記事リストが空の場合は空配列を返す", () => {
