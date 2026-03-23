@@ -30,9 +30,6 @@ export function TopPage() {
 				<Link to="/talks" onClick={() => setMenuOpen(false)}>
 					Talks
 				</Link>
-				<Link to="/chat" onClick={() => setMenuOpen(false)}>
-					Chat
-				</Link>
 				<Link to="/articles" onClick={() => setMenuOpen(false)}>
 					Articles
 				</Link>
