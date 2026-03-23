@@ -40,7 +40,7 @@ const PERIOD_DAYS: Record<PeriodType, number> = {
 	weekly: 7,
 };
 
-const MIN_ARTICLES_PER_TOPIC = 2;
+const MIN_ARTICLES_PER_TOPIC = 1;
 const CHUNK_SIZE = 10;
 const MAX_CATEGORY_SIZE = 15;
 const MAX_CONCURRENCY = 3;
@@ -315,7 +315,9 @@ export function parseLLMResponse(
 	const validIds = new Set(articles.map((a) => a.id));
 	const parsed = extractJsonArray(text);
 	if (!parsed) return [];
-	return validateTopicGroups(parsed, validIds);
+	const topics = validateTopicGroups(parsed, validIds);
+	topics.sort((a, b) => b.article_ids.length - a.article_ids.length);
+	return topics;
 }
 
 // ─── ステージ1: 記事アノテーション（要約+カテゴリ付与）─
@@ -384,12 +386,14 @@ function buildGroupingPrompt(group: CategoryGroup): string {
 	return `以下は「${group.category}」カテゴリの記事の要約一覧です。具体的な出来事・ニュース・議論ごとにグルーピングし、各グループのタイトルと要約を作成してください。
 
 ## ルール
+- すべての記事を必ずいずれかのトピックに割り当ててください。どのトピックにも属さない記事があってはいけません
+- 関連する記事はできるだけまとめてください。ただし無関係な記事を無理にまとめないでください
+- 1つの出来事に関する記事が1件しかない場合も、そのまま1グループにしてください
 - 「AI」「Rails」のような大カテゴリ名をそのままタイトルにしないでください
 - タイトルは具体的な出来事を表す端的な表現にしてください（例: 「GPT-5.4 Omni発表」「NVIDIAのAIインフラ投資」）
 - 要約は2〜3文で、具体的に何が起きているか・何が議論されているかを説明してください
 - 固有名詞や具体的な数字があれば積極的に含めてください
 - 「〜に関する記事が複数あります」のような抽象的な表現は避けてください
-- 1つの出来事に関する記事が1件しかない場合も、他と無理にまとめずそのまま1グループにしてください
 
 ## 記事一覧
 ${articleList}
@@ -404,8 +408,14 @@ async function groupWithinCategory(
 	group: CategoryGroup,
 	allValidIds: Set<string>,
 ): Promise<TopicGroup[]> {
-	// 記事が1件以下のカテゴリはスキップ
-	if (group.articles.length < MIN_ARTICLES_PER_TOPIC) return [];
+	if (group.articles.length === 0) return [];
+	// 1記事のカテゴリはAI呼び出し不要（結果が決定的）
+	if (group.articles.length === 1) {
+		const a = group.articles[0];
+		const title =
+			a.summary.length > 40 ? `${a.summary.slice(0, 40)}…` : a.summary;
+		return [{ title, summary: a.summary, article_ids: [a.id] }];
+	}
 
 	const prompt = buildGroupingPrompt(group);
 	const response = await withRetry(
@@ -500,6 +510,7 @@ async function runPipeline(
 	);
 
 	const topics = topicResults.flat();
+	topics.sort((a, b) => b.article_ids.length - a.article_ids.length);
 	console.log(`[topics] stage2 done: ${topics.length} topics generated`);
 	return topics;
 }
