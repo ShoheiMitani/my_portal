@@ -260,10 +260,21 @@ describe("GET /api/articles", () => {
 });
 
 describe("scheduled handler", () => {
-	it("calls crawlAllChannels and logs results", async () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+	});
+
+	it("calls crawlAllChannels and generates daily topics on non-Monday", async () => {
 		const { crawlAllChannels } = await import("../agent/crawl");
 		const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 		const mockWaitUntil = vi.fn((p: Promise<unknown>) => p);
+		mockStub.fetch.mockClear();
+		vi.setSystemTime(new Date("2026-04-28T12:00:00.000Z")); // Tuesday
 
 		const handler = (await import("../index")).default;
 		await handler.scheduled({} as ScheduledEvent, mockEnv, {
@@ -272,6 +283,26 @@ describe("scheduled handler", () => {
 
 		expect(crawlAllChannels).toHaveBeenCalled();
 		expect(mockWaitUntil).toHaveBeenCalled();
+		expect(mockStub.fetch).toHaveBeenCalledTimes(1);
+		const req = vi.mocked(mockStub.fetch).mock.calls[0][0] as Request;
+		expect(await req.json()).toEqual({ periods: ["daily"] });
+		consoleSpy.mockRestore();
+	});
+
+	it("includes weekly topics on Monday", async () => {
+		const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const mockWaitUntil = vi.fn((p: Promise<unknown>) => p);
+		mockStub.fetch.mockClear();
+		vi.setSystemTime(new Date("2026-04-27T12:00:00.000Z")); // Monday
+
+		const handler = (await import("../index")).default;
+		await handler.scheduled({} as ScheduledEvent, mockEnv, {
+			waitUntil: mockWaitUntil,
+		} as unknown as ExecutionContext);
+
+		expect(mockStub.fetch).toHaveBeenCalledTimes(1);
+		const req = vi.mocked(mockStub.fetch).mock.calls[0][0] as Request;
+		expect(await req.json()).toEqual({ periods: ["daily", "weekly"] });
 		consoleSpy.mockRestore();
 	});
 });

@@ -14,6 +14,7 @@ import { fetchHatenaBlog, fetchSpeakerDeck } from "./lib/feeds";
 export { TrendCollectorAgent } from "./agent/trend-collector";
 
 export const app = new Hono<{ Bindings: Env }>();
+const WEEKLY_TOPIC_UTC_DAY = 1; // Monday
 
 function getTopicGeneratorStub(env: Env) {
 	const id = env.TrendCollector.idFromName("topic-generator");
@@ -230,8 +231,8 @@ export default {
 					if (!hasNew) return;
 
 					const periods = ["daily"];
-					const hour = new Date().getUTCHours();
-					if (hour === 0) periods.push("weekly");
+					const day = new Date().getUTCDay();
+					if (day === WEEKLY_TOPIC_UTC_DAY) periods.push("weekly");
 
 					const stub = getTopicGeneratorStub(env);
 					await stub.fetch(
