@@ -32,6 +32,8 @@ body {
 	height: 36px;
 	border-radius: 10px;
 	border: 1.5px solid #e0e0e0;
+	background: none;
+	cursor: pointer;
 	text-decoration: none;
 	color: #333;
 	transition: background-color 0.2s;

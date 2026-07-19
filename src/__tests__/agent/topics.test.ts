@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+	buildGroupingPrompt,
 	groupByCategory,
+	markDemotedTopics,
 	parseLLMResponse,
 	splitIntoChunks,
+	titleSimilarity,
 } from "../../agent/topics";
+import type { TopicPreference } from "../../agent/topics";
 
 const ARTICLES = [
 	{
@@ -221,5 +225,179 @@ describe("groupByCategory", () => {
 
 		const groups = groupByCategory(annotations);
 		expect(groups).toHaveLength(2);
+	});
+});
+
+describe("titleSimilarity", () => {
+	it("同一タイトルは1を返す", () => {
+		expect(titleSimilarity("GPT-5.4 Omni発表", "GPT-5.4 Omni発表")).toBe(1);
+	});
+
+	it("表記ゆれ程度の差分は高い類似度になる", () => {
+		const sim = titleSimilarity("GPT-5.4 Omni発表", "GPT-5.4 Omniが発表");
+		expect(sim).toBeGreaterThan(0.6);
+	});
+
+	it("無関係なタイトルは低い類似度になる", () => {
+		const sim = titleSimilarity("Rails 8リリース", "GPT-5.4 Omni発表");
+		expect(sim).toBeLessThan(0.2);
+	});
+
+	it("空文字は0を返す", () => {
+		expect(titleSimilarity("", "GPT-5.4")).toBe(0);
+	});
+});
+
+describe("markDemotedTopics", () => {
+	const dislikes: TopicPreference[] = [
+		{
+			preference: "dislike",
+			topic_title: "OpenAIの新モデル発表",
+			topic_summary: "OpenAIが新モデルを発表した",
+			category: "AI",
+		},
+	];
+
+	it("dislikeとタイトルが強く類似するトピックにdemotedを立てる", () => {
+		const topics = [
+			{
+				title: "OpenAIが新モデルを発表",
+				summary: "概要",
+				article_ids: ["a1", "a2", "a3"],
+				category: "AI",
+			},
+			{
+				title: "Rails 8リリース",
+				summary: "概要",
+				article_ids: ["a4"],
+				category: "Rails",
+			},
+		];
+
+		const result = markDemotedTopics(topics, dislikes);
+		expect(result[0].title).toBe("OpenAIが新モデルを発表");
+		expect(result[0].demoted).toBe(true);
+		expect(result[1].title).toBe("Rails 8リリース");
+		expect(result[1].demoted).toBe(false);
+	});
+
+	it("カテゴリが一致する場合は中程度の類似度でも降格する", () => {
+		const railsDislike: TopicPreference[] = [
+			{
+				preference: "dislike",
+				topic_title: "Rails 8の新機能まとめ",
+				topic_summary: "新機能の概要",
+				category: "Rails",
+			},
+		];
+		const topics = [
+			{
+				title: "Rails 8.1の機能解説",
+				summary: "概要",
+				article_ids: ["a1", "a2"],
+				category: "Rails",
+			},
+			{
+				title: "GoのWebフレームワーク比較",
+				summary: "概要",
+				article_ids: ["a3"],
+				category: "Go",
+			},
+		];
+
+		const result = markDemotedTopics(topics, railsDislike);
+		expect(result[0].demoted).toBe(true);
+		expect(result[1].demoted).toBe(false);
+	});
+
+	it("カテゴリが異なる場合は中程度の類似度では降格しない", () => {
+		const topics = [
+			{
+				title: "Rails 8.1の機能解説",
+				summary: "概要",
+				article_ids: ["a1"],
+				category: "AI",
+			},
+		];
+		const railsDislike: TopicPreference[] = [
+			{
+				preference: "dislike",
+				topic_title: "Rails 8の新機能まとめ",
+				topic_summary: "新機能の概要",
+				category: "Rails",
+			},
+		];
+
+		const result = markDemotedTopics(topics, railsDislike);
+		expect(result[0].demoted).toBe(false);
+	});
+
+	it("dislikeがなければ全トピックがdemoted=falseになる", () => {
+		const topics = [
+			{ title: "1件", summary: "概要", article_ids: ["a1"], category: "AI" },
+			{
+				title: "3件",
+				summary: "概要",
+				article_ids: ["a1", "a2", "a3"],
+				category: "AI",
+			},
+		];
+
+		const result = markDemotedTopics(topics, []);
+		expect(result.every((t) => t.demoted === false)).toBe(true);
+	});
+});
+
+describe("buildGroupingPrompt", () => {
+	const group = {
+		category: "AI",
+		articles: [
+			{ id: "a1", summary: "GPT-5.4 Omniの発表について" },
+			{ id: "a2", summary: "NVIDIAのAIインフラ投資" },
+		],
+	};
+
+	it("好みが未登録なら好みセクションを含まない", () => {
+		const prompt = buildGroupingPrompt(group, []);
+		expect(prompt).not.toContain("## ユーザーの好み");
+		expect(prompt).toContain(
+			"すべての記事を必ずいずれかのトピックに割り当ててください。どのトピックにも属さない記事があってはいけません",
+		);
+	});
+
+	it("dislikeが除外指示として含まれる", () => {
+		const prompt = buildGroupingPrompt(group, [
+			{
+				preference: "dislike",
+				topic_title: "暗号資産の価格変動",
+				topic_summary: "ビットコイン価格の乱高下",
+				category: "ビジネス",
+			},
+		]);
+		expect(prompt).toContain("## ユーザーの好み");
+		expect(prompt).toContain("「興味なし」と登録した過去の話題");
+		expect(prompt).toContain("- 暗号資産の価格変動: ビットコイン価格の乱高下");
+		// 全記事割り当ての原則は維持しつつ、dislike該当分のみ除外を許可する
+		expect(prompt).toContain(
+			"すべての記事を必ずいずれかのトピックに割り当ててください。ただし下記「ユーザーの好み」の「興味なし」に明確に該当する記事だけは除外して構いません",
+		);
+		expect(prompt).toContain("それ以外の記事を除外してはいけません");
+	});
+
+	it("likeが優先指示として含まれる", () => {
+		const prompt = buildGroupingPrompt(group, [
+			{
+				preference: "like",
+				topic_title: "Rustの非同期ランタイム",
+				topic_summary: "tokioの新バージョン",
+				category: "Rust",
+			},
+		]);
+		expect(prompt).toContain("「興味あり」と登録した過去の話題");
+		expect(prompt).toContain("- Rustの非同期ランタイム");
+		// likeのみの場合は全記事割り当てルールは維持される
+		expect(prompt).toContain(
+			"すべての記事を必ずいずれかのトピックに割り当ててください。どのトピックにも属さない記事があってはいけません",
+		);
 	});
 });

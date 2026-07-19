@@ -20,6 +20,16 @@ interface TopicGroup {
 	title: string;
 	summary: string;
 	article_ids: string[];
+	category?: string;
+	demoted?: boolean;
+}
+
+/** ユーザーが登録したトピックへの好み（登録時のスナップショット） */
+export interface TopicPreference {
+	preference: "like" | "dislike";
+	topic_title: string;
+	topic_summary: string;
+	category: string;
 }
 
 /** ステージ1: 記事ごとのアノテーション結果 */
@@ -32,6 +42,8 @@ interface ArticleAnnotation {
 /** カテゴリごとにまとめた記事群 */
 interface CategoryGroup {
 	category: string;
+	/** ログ表示用。分割チャンクの "(1/2)" サフィックスを含む（categoryは常に元のカテゴリ名） */
+	label?: string;
 	articles: { id: string; summary: string }[];
 }
 
@@ -45,6 +57,13 @@ const CHUNK_SIZE = 10;
 const MAX_CATEGORY_SIZE = 15;
 const MAX_CONCURRENCY = 3;
 const AI_MODEL = "@cf/openai/gpt-oss-120b" as const;
+
+// プロンプトに注入する好みの上限（プロンプト肥大防止）
+const MAX_PREFERENCES = 50;
+// dislikeスナップショットとの類似度がこの値以上なら無条件で降格
+const DISLIKE_SIMILARITY_STRONG = 0.6;
+// カテゴリが一致している場合はこの類似度で降格
+const DISLIKE_SIMILARITY_WITH_CATEGORY = 0.4;
 
 // ─── ユーティリティ ────────────────────────────────────
 
@@ -95,6 +114,56 @@ async function runWithConcurrency<T>(
 	return results;
 }
 
+function byArticleCountDesc(a: TopicGroup, b: TopicGroup): number {
+	return b.article_ids.length - a.article_ids.length;
+}
+
+function bigrams(s: string): Set<string> {
+	const normalized = s.toLowerCase().replace(/\s+/g, "");
+	if (normalized.length < 2) {
+		return new Set(normalized ? [normalized] : []);
+	}
+	const set = new Set<string>();
+	for (let i = 0; i < normalized.length - 1; i++) {
+		set.add(normalized.slice(i, i + 2));
+	}
+	return set;
+}
+
+/** 文字bigramのDice係数によるタイトル類似度（0〜1） */
+export function titleSimilarity(a: string, b: string): number {
+	const setA = bigrams(a);
+	const setB = bigrams(b);
+	if (setA.size === 0 || setB.size === 0) return 0;
+	let intersection = 0;
+	for (const gram of setA) {
+		if (setB.has(gram)) intersection++;
+	}
+	return (2 * intersection) / (setA.size + setB.size);
+}
+
+/**
+ * dislikeスナップショットに類似するトピックにdemotedフラグを立てる。
+ * プロンプトでの除外指示が効かなかった場合のセーフティネット。
+ * 表示順への反映はAPI側のORDER BYが担う
+ */
+export function markDemotedTopics(
+	topics: TopicGroup[],
+	dislikes: TopicPreference[],
+): TopicGroup[] {
+	const isDemoted = (topic: TopicGroup): boolean =>
+		dislikes.some((d) => {
+			const similarity = titleSimilarity(topic.title, d.topic_title);
+			if (similarity >= DISLIKE_SIMILARITY_STRONG) return true;
+			return (
+				!!topic.category &&
+				topic.category === d.category &&
+				similarity >= DISLIKE_SIMILARITY_WITH_CATEGORY
+			);
+		});
+	return topics.map((t) => ({ ...t, demoted: isDemoted(t) }));
+}
+
 export function groupByCategory(
 	annotations: ArticleAnnotation[],
 ): CategoryGroup[] {
@@ -132,6 +201,24 @@ async function fetchArticlesForGrouping(
 	return results;
 }
 
+async function fetchPreferences(db: D1Database): Promise<TopicPreference[]> {
+	try {
+		const { results } = await db
+			.prepare(
+				`SELECT preference, topic_title, topic_summary, category
+				 FROM topic_preferences
+				 ORDER BY created_at DESC
+				 LIMIT ?`,
+			)
+			.bind(MAX_PREFERENCES)
+			.all<TopicPreference>();
+		return results;
+	} catch (e) {
+		console.error("[topics] failed to fetch preferences:", e);
+		return [];
+	}
+}
+
 async function saveTopics(
 	db: D1Database,
 	topics: TopicGroup[],
@@ -155,7 +242,7 @@ async function saveTopics(
 		insertStmts.push(
 			db
 				.prepare(
-					"INSERT INTO topics (id, title, summary, source_count, period_type, period_start, period_end) VALUES (?, ?, ?, ?, ?, ?, ?)",
+					"INSERT INTO topics (id, title, summary, source_count, period_type, period_start, period_end, category, demoted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				)
 				.bind(
 					topicId,
@@ -165,6 +252,8 @@ async function saveTopics(
 					periodType,
 					periodStart,
 					periodEnd,
+					topic.category ?? "",
+					topic.demoted ? 1 : 0,
 				),
 		);
 		for (const articleId of topic.article_ids) {
@@ -316,7 +405,7 @@ export function parseLLMResponse(
 	const parsed = extractJsonArray(text);
 	if (!parsed) return [];
 	const topics = validateTopicGroups(parsed, validIds);
-	topics.sort((a, b) => b.article_ids.length - a.article_ids.length);
+	topics.sort(byArticleCountDesc);
 	return topics;
 }
 
@@ -378,15 +467,48 @@ async function annotateChunk(
 
 // ─── ステージ2: カテゴリ内の細かいグルーピング+要約 ───
 
-function buildGroupingPrompt(group: CategoryGroup): string {
+function buildPreferencesSection(preferences: TopicPreference[]): string {
+	if (preferences.length === 0) return "";
+	const dislikes = preferences.filter((p) => p.preference === "dislike");
+	const likes = preferences.filter((p) => p.preference === "like");
+	const lines: string[] = ["", "## ユーザーの好み"];
+	if (dislikes.length > 0) {
+		lines.push(
+			"以下はユーザーが「興味なし」と登録した過去の話題です。これらと同種・同系統の話題はトピックとして生成せず、該当する記事は除外してください:",
+		);
+		for (const p of dislikes) {
+			lines.push(`- ${p.topic_title}: ${p.topic_summary}`);
+		}
+	}
+	if (likes.length > 0) {
+		if (dislikes.length > 0) lines.push("");
+		lines.push(
+			"以下はユーザーが「興味あり」と登録した過去の話題です。これらに近い話題は優先的に独立したトピックとして立ててください:",
+		);
+		for (const p of likes) {
+			lines.push(`- ${p.topic_title}`);
+		}
+	}
+	return lines.join("\n");
+}
+
+export function buildGroupingPrompt(
+	group: CategoryGroup,
+	preferences: TopicPreference[],
+): string {
 	const articleList = group.articles
 		.map((a, i) => `${i + 1}. [id:${a.id}] ${a.summary}`)
 		.join("\n");
 
+	const hasDislikes = preferences.some((p) => p.preference === "dislike");
+	const assignmentRule = hasDislikes
+		? "- すべての記事を必ずいずれかのトピックに割り当ててください。ただし下記「ユーザーの好み」の「興味なし」に明確に該当する記事だけは除外して構いません。それ以外の記事を除外してはいけません"
+		: "- すべての記事を必ずいずれかのトピックに割り当ててください。どのトピックにも属さない記事があってはいけません";
+
 	return `以下は「${group.category}」カテゴリの記事の要約一覧です。具体的な出来事・ニュース・議論ごとにグルーピングし、各グループのタイトルと要約を作成してください。
 
 ## ルール
-- すべての記事を必ずいずれかのトピックに割り当ててください。どのトピックにも属さない記事があってはいけません
+${assignmentRule}
 - 関連する記事はできるだけまとめてください。ただし無関係な記事を無理にまとめないでください
 - 1つの出来事に関する記事が1件しかない場合も、そのまま1グループにしてください
 - 「AI」「Rails」のような大カテゴリ名をそのままタイトルにしないでください
@@ -394,7 +516,7 @@ function buildGroupingPrompt(group: CategoryGroup): string {
 - 要約は2〜3文で、具体的に何が起きているか・何が議論されているかを説明してください
 - 固有名詞や具体的な数字があれば積極的に含めてください
 - 「〜に関する記事が複数あります」のような抽象的な表現は避けてください
-
+${buildPreferencesSection(preferences)}
 ## 記事一覧
 ${articleList}
 
@@ -407,6 +529,7 @@ async function groupWithinCategory(
 	ai: Ai,
 	group: CategoryGroup,
 	allValidIds: Set<string>,
+	preferences: TopicPreference[],
 ): Promise<TopicGroup[]> {
 	if (group.articles.length === 0) return [];
 	// 1記事のカテゴリはAI呼び出し不要（結果が決定的）
@@ -414,10 +537,17 @@ async function groupWithinCategory(
 		const a = group.articles[0];
 		const title =
 			a.summary.length > 40 ? `${a.summary.slice(0, 40)}…` : a.summary;
-		return [{ title, summary: a.summary, article_ids: [a.id] }];
+		return [
+			{
+				title,
+				summary: a.summary,
+				article_ids: [a.id],
+				category: group.category,
+			},
+		];
 	}
 
-	const prompt = buildGroupingPrompt(group);
+	const prompt = buildGroupingPrompt(group, preferences);
 	const response = await withRetry(
 		() =>
 			ai.run(AI_MODEL, {
@@ -431,12 +561,15 @@ async function groupWithinCategory(
 	const items = parseAIItems(response);
 	if (!items) {
 		console.error(
-			`[topics] grouping parse failed for "${group.category}", raw response:`,
+			`[topics] grouping parse failed for "${group.label ?? group.category}", raw response:`,
 			JSON.stringify(response).slice(0, 500),
 		);
 		return [];
 	}
-	return validateTopicGroups(items, allValidIds);
+	return validateTopicGroups(items, allValidIds).map((t) => ({
+		...t,
+		category: group.category,
+	}));
 }
 
 // ─── パイプライン本体 ─────────────────────────────────
@@ -444,7 +577,7 @@ async function groupWithinCategory(
 async function runPipeline(
 	ai: Ai,
 	articles: ArticleForGrouping[],
-	_periodType: PeriodType,
+	preferences: TopicPreference[],
 ): Promise<TopicGroup[]> {
 	if (articles.length === 0) return [];
 
@@ -483,7 +616,8 @@ async function runPipeline(
 			const subChunks = splitIntoChunks(group.articles, MAX_CATEGORY_SIZE);
 			for (let i = 0; i < subChunks.length; i++) {
 				groupingTasks.push({
-					category: `${group.category}(${i + 1}/${subChunks.length})`,
+					category: group.category,
+					label: `${group.category}(${i + 1}/${subChunks.length})`,
 					articles: subChunks[i],
 				});
 			}
@@ -501,8 +635,11 @@ async function runPipeline(
 	const topicResults = await runWithConcurrency(
 		groupingTasks.map(
 			(group) => () =>
-				groupWithinCategory(ai, group, allValidIds).catch((e) => {
-					console.error(`[topics] grouping failed for "${group.category}":`, e);
+				groupWithinCategory(ai, group, allValidIds, preferences).catch((e) => {
+					console.error(
+						`[topics] grouping failed for "${group.label ?? group.category}":`,
+						e,
+					);
 					return [] as TopicGroup[];
 				}),
 		),
@@ -510,7 +647,7 @@ async function runPipeline(
 	);
 
 	const topics = topicResults.flat();
-	topics.sort((a, b) => b.article_ids.length - a.article_ids.length);
+	topics.sort(byArticleCountDesc);
 	console.log(`[topics] stage2 done: ${topics.length} topics generated`);
 	return topics;
 }
@@ -531,7 +668,15 @@ export async function generateTopics(
 		`[topics] ${periodType}: ${articles.length} articles found, starting pipeline...`,
 	);
 
-	const topics = await runPipeline(env.AI, articles, periodType);
+	const preferences = await fetchPreferences(env.DB);
+	console.log(
+		`[topics] ${periodType}: ${preferences.length} preferences loaded`,
+	);
+
+	const topics = markDemotedTopics(
+		await runPipeline(env.AI, articles, preferences),
+		preferences.filter((p) => p.preference === "dislike"),
+	);
 	console.log(`[topics] ${periodType}: ${topics.length} topics generated`);
 
 	const now = new Date().toISOString();

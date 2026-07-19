@@ -45,14 +45,78 @@ app.get("/api/topics", async (c) => {
 	}
 	const { results: topics } = await c.env.DB.prepare(
 		`SELECT t.id, t.title, t.summary, t.source_count, t.period_type,
-		        t.generated_at, t.period_start, t.period_end
+		        t.generated_at, t.period_start, t.period_end,
+		        p.preference
 		 FROM topics t
+		 LEFT JOIN topic_preferences p ON p.topic_title = t.title
 		 WHERE t.period_type = ?
-		 ORDER BY t.source_count DESC`,
+		 ORDER BY CASE
+		            WHEN p.preference = 'like' THEN 0
+		            WHEN p.preference = 'dislike'
+		                 OR (p.preference IS NULL AND t.demoted = 1) THEN 2
+		            ELSE 1
+		          END,
+		          t.source_count DESC`,
 	)
 		.bind(period)
 		.all();
 	return c.json(topics);
+});
+
+app.post("/api/topics/:id/preference", async (c) => {
+	const body = await c.req
+		.json<{ preference?: string }>()
+		.catch(() => ({}) as { preference?: string });
+	const preference = body.preference;
+	if (preference !== "like" && preference !== "dislike") {
+		return c.json({ error: "preference must be 'like' or 'dislike'" }, 400);
+	}
+
+	const topic = await c.env.DB.prepare(
+		"SELECT title, summary, category FROM topics WHERE id = ?",
+	)
+		.bind(c.req.param("id"))
+		.first<{ title: string; summary: string; category: string }>();
+	if (!topic) return c.json({ error: "not found" }, 404);
+
+	// トピックは再生成のたびに消えるため、内容のスナップショットを保存する
+	await c.env.DB.prepare(
+		`INSERT INTO topic_preferences (id, preference, topic_title, topic_summary, category)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(topic_title) DO UPDATE SET
+		   preference = excluded.preference,
+		   topic_summary = excluded.topic_summary,
+		   category = excluded.category,
+		   created_at = datetime('now')`,
+	)
+		.bind(
+			crypto.randomUUID(),
+			preference,
+			topic.title,
+			topic.summary,
+			topic.category,
+		)
+		.run();
+	return c.json({ ok: true, preference });
+});
+
+app.delete("/api/topics/:id/preference", async (c) => {
+	const topic = await c.env.DB.prepare("SELECT title FROM topics WHERE id = ?")
+		.bind(c.req.param("id"))
+		.first<{ title: string }>();
+	if (!topic) return c.json({ error: "not found" }, 404);
+
+	// 好みの削除と同時に、その好みが原因で立っていた降格フラグも解除する
+	// （類似タイトルによる間接的な降格は次回の再生成時に再計算される）
+	await c.env.DB.batch([
+		c.env.DB.prepare(
+			"DELETE FROM topic_preferences WHERE topic_title = ?",
+		).bind(topic.title),
+		c.env.DB.prepare("UPDATE topics SET demoted = 0 WHERE title = ?").bind(
+			topic.title,
+		),
+	]);
+	return c.json({ ok: true });
 });
 
 app.post("/api/topics/generate", async (c) => {
@@ -196,7 +260,11 @@ app.get("/api/articles", async (c) => {
 app.get("/api/topics/:id", async (c) => {
 	const topicId = c.req.param("id");
 	const topic = await c.env.DB.prepare(
-		"SELECT id, title, summary, source_count, period_type, generated_at FROM topics WHERE id = ?",
+		`SELECT t.id, t.title, t.summary, t.source_count, t.period_type,
+		        t.generated_at, p.preference
+		 FROM topics t
+		 LEFT JOIN topic_preferences p ON p.topic_title = t.title
+		 WHERE t.id = ?`,
 	)
 		.bind(topicId)
 		.first();
