@@ -242,6 +242,196 @@ describe("POST /api/slack/events", () => {
 	});
 });
 
+describe("topic preference API", () => {
+	const makeDbMock = (topicRow: unknown) => {
+		const first = vi.fn().mockResolvedValue(topicRow);
+		const run = vi.fn().mockResolvedValue({ success: true });
+		const batch = vi.fn().mockResolvedValue([]);
+		const prepare = vi.fn((_sql: string) => ({
+			bind: vi.fn(() => ({ first, run })),
+		}));
+		return {
+			db: { prepare, batch } as unknown as D1Database,
+			prepare,
+			first,
+			run,
+			batch,
+		};
+	};
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	describe("POST /api/topics/:id/preference", () => {
+		it("好みを登録して200を返す", async () => {
+			const { db, prepare, run } = makeDbMock({
+				title: "GPT-5.4 Omni発表",
+				summary: "OpenAIが新モデルを発表",
+				category: "AI",
+			});
+			const res = await app.request(
+				"/api/topics/topic-1/preference",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ preference: "dislike" }),
+				},
+				{ ...mockEnv, DB: db },
+			);
+			expect(res.status).toBe(200);
+			const data = (await res.json()) as { ok: boolean; preference: string };
+			expect(data.ok).toBe(true);
+			expect(data.preference).toBe("dislike");
+			expect(run).toHaveBeenCalled();
+			const insertSql = prepare.mock.calls
+				.map((c) => c[0])
+				.find((sql) => sql.includes("INSERT INTO topic_preferences"));
+			expect(insertSql).toContain("ON CONFLICT(topic_title)");
+		});
+
+		it("preferenceが不正なら400を返す", async () => {
+			const { db } = makeDbMock(null);
+			const res = await app.request(
+				"/api/topics/topic-1/preference",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ preference: "invalid" }),
+				},
+				{ ...mockEnv, DB: db },
+			);
+			expect(res.status).toBe(400);
+		});
+
+		it("トピックが存在しなければ404を返す", async () => {
+			const { db } = makeDbMock(null);
+			const res = await app.request(
+				"/api/topics/nonexistent/preference",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ preference: "like" }),
+				},
+				{ ...mockEnv, DB: db },
+			);
+			expect(res.status).toBe(404);
+		});
+	});
+
+	describe("DELETE /api/topics/:id/preference", () => {
+		it("好みを削除し、降格フラグも解除して200を返す", async () => {
+			const { db, prepare, batch } = makeDbMock({ title: "GPT-5.4 Omni発表" });
+			const res = await app.request(
+				"/api/topics/topic-1/preference",
+				{ method: "DELETE" },
+				{ ...mockEnv, DB: db },
+			);
+			expect(res.status).toBe(200);
+			expect(batch).toHaveBeenCalled();
+			const sqls = prepare.mock.calls.map((c) => c[0]);
+			expect(
+				sqls.some((sql) => sql.includes("DELETE FROM topic_preferences")),
+			).toBe(true);
+			expect(
+				sqls.some((sql) => sql.includes("UPDATE topics SET demoted = 0")),
+			).toBe(true);
+		});
+
+		it("トピックが存在しなければ404を返す", async () => {
+			const { db } = makeDbMock(null);
+			const res = await app.request(
+				"/api/topics/nonexistent/preference",
+				{ method: "DELETE" },
+				{ ...mockEnv, DB: db },
+			);
+			expect(res.status).toBe(404);
+		});
+	});
+});
+
+describe("GET /api/topics", () => {
+	it("トピック一覧にpreferenceを含めて返す", async () => {
+		const all = vi.fn().mockResolvedValue({
+			results: [
+				{
+					id: "t1",
+					title: "GPT-5.4 Omni発表",
+					summary: "概要",
+					source_count: 3,
+					period_type: "daily",
+					generated_at: "2026-07-17",
+					preference: "dislike",
+				},
+			],
+		});
+		const prepare = vi.fn((_sql: string) => ({ bind: vi.fn(() => ({ all })) }));
+		const db = { prepare } as unknown as D1Database;
+
+		const res = await app.request(
+			"/api/topics?period=daily",
+			{},
+			{
+				...mockEnv,
+				DB: db,
+			},
+		);
+		expect(res.status).toBe(200);
+		const data = (await res.json()) as { preference: string | null }[];
+		expect(data[0].preference).toBe("dislike");
+		// 好みテーブルと結合し、降格トピックを末尾に回すクエリになっている
+		const sql = prepare.mock.calls[0][0];
+		expect(sql).toContain("topic_preferences");
+		expect(sql).toContain("demoted");
+	});
+});
+
+describe("GET /api/topics/:id", () => {
+	it("トピック詳細にpreferenceを含めて返す", async () => {
+		const first = vi.fn().mockResolvedValue({
+			id: "t1",
+			title: "GPT-5.4の躍進とAIの進化",
+			summary: "概要",
+			source_count: 4,
+			period_type: "daily",
+			generated_at: "2026-07-17",
+			preference: "like",
+		});
+		const all = vi.fn().mockResolvedValue({ results: [] });
+		const prepare = vi.fn((_sql: string) => ({
+			bind: vi.fn(() => ({ first, all })),
+		}));
+		const db = { prepare } as unknown as D1Database;
+
+		const res = await app.request("/api/topics/t1", {}, { ...mockEnv, DB: db });
+		expect(res.status).toBe(200);
+		const data = (await res.json()) as {
+			preference: string | null;
+			articles: unknown[];
+		};
+		expect(data.preference).toBe("like");
+		expect(data.articles).toEqual([]);
+		// 好みテーブルと結合してpreferenceを取得している
+		const topicSql = prepare.mock.calls[0][0];
+		expect(topicSql).toContain("topic_preferences");
+	});
+
+	it("トピックが存在しなければ404を返す", async () => {
+		const first = vi.fn().mockResolvedValue(null);
+		const prepare = vi.fn((_sql: string) => ({
+			bind: vi.fn(() => ({ first })),
+		}));
+		const db = { prepare } as unknown as D1Database;
+
+		const res = await app.request(
+			"/api/topics/nonexistent",
+			{},
+			{ ...mockEnv, DB: db },
+		);
+		expect(res.status).toBe(404);
+	});
+});
+
 describe("GET /api/articles", () => {
 	it("returns 200 with JSON", async () => {
 		const mockDb = {
